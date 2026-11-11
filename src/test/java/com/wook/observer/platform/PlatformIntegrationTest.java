@@ -127,16 +127,19 @@ class PlatformIntegrationTest {
         HttpResponse<String> report = admin.get("/api/jobs/"+job);
         for (int i=0; i<100 && report.statusCode()==409; i++) { Thread.sleep(30); report=admin.get("/api/jobs/"+job); }
         assertThat(report.statusCode()).isEqualTo(200);
-        assertThat(report.body()).contains("assessment", "catalogRevision", "점검 불가");
+        assertThat(report.body()).contains("assessment", "catalogRevision", "미판정");
+        var operator = json.readTree(admin.get("/api/jobs/"+job+"/overview").body());
+        assertThat(operator.path("operator").path("actions").isArray()).isTrue();
+        assertThat(operator.path("report").path("assessment").path("catalogRevision").asInt()).isPositive();
         for (String format : new String[]{"xlsx","json","md","zip"}) {
             var downloaded = admin.binary("/api/jobs/"+job+"/download/"+format);
             assertThat(downloaded.statusCode()).isEqualTo(200);
             assertThat(downloaded.headers().firstValue("Cache-Control")).contains("no-store");
             if (format.equals("xlsx")) {
                 try (var workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook(new java.io.ByteArrayInputStream(downloaded.body()))) {
-                    assertThat(workbook.getNumberOfSheets()).isEqualTo(33);
+                    assertThat(workbook.getNumberOfSheets()).isEqualTo(34);
                     assertThat(workbook.getSheet("취약점 상세")).isNotNull();
-                    assertThat(workbook.getSheet("애플리케이션_오픈소스").getRow(2).getCell(7).getStringCellValue()).isEqualTo("취약점발견");
+                    assertThat(workbook.getSheet("애플리케이션_오픈소스").getRow(2).getCell(2).getStringCellValue()).isEqualTo("취약점발견");
                 }
             }
         }
@@ -194,6 +197,35 @@ class PlatformIntegrationTest {
         assertThat(admin.send("POST", "/api/admin/ssh/host-keys", Map.of("host", "-f /etc/passwd", "port", 22), true).statusCode()).isEqualTo(400);
         assertThat(anonymous.binary("/fonts/JetBrainsMono-Regular.woff2").statusCode()).isEqualTo(200);
         assertThat(anonymous.binary("/fonts/NotoSansKR-Variable.ttf").statusCode()).isEqualTo(200);
+    }
+
+    @Test
+    void pagesCatalogWithStableOrderingAccurateTotalsAndLiteralSearch() throws Exception {
+        var records = new java.util.ArrayList<JsonNode>();
+        for (int i = 0; i < 100; i++) {
+            records.add(json.readTree(advisory("PAGE-test-" + String.format("%03d", i), "2026-11-11T00:00:00Z", false)));
+        }
+        catalog.importBytes(json.writeValueAsBytes(records), "pagination-test");
+        Client client = login("admin", "Init1234");
+        var first = json.readTree(client.get("/api/catalog/page?query=PAGE-test-&page=0").body());
+        var second = json.readTree(client.get("/api/catalog/page?query=PAGE-test-&page=1").body());
+        assertThat(first.path("total").asInt()).isEqualTo(100);
+        assertThat(first.path("totalPages").asInt()).isEqualTo(2);
+        assertThat(first.path("hasPrevious").asBoolean()).isFalse();
+        assertThat(first.path("hasNext").asBoolean()).isTrue();
+        assertThat(second.path("hasNext").asBoolean()).isFalse();
+        assertThat(second.path("items").get(0).path("advisory_id").asText()).isEqualTo("PAGE-test-050");
+        var ids = new java.util.HashSet<String>();
+        first.path("items").forEach(r -> ids.add(r.path("advisory_id").asText()));
+        second.path("items").forEach(r -> ids.add(r.path("advisory_id").asText()));
+        assertThat(ids).hasSize(100);
+        assertThat(catalog.page("PAGE-test-", 99).page()).isEqualTo(1);
+        assertThat(catalog.page("PAGE-test-099", 1).items()).hasSize(1);
+        assertThat(catalog.page("PAGE-test-%", 0).total()).isZero();
+        assertThat(catalog.page("PAGE-test-_", 0).total()).isZero();
+        assertThat(catalog.page("nonexistent-page-record", 0).hasNext()).isFalse();
+        assertThat(client.get("/api/catalog/page?page=-1").statusCode()).isEqualTo(400);
+        assertThat(json.readTree(client.get("/api/catalog?query=PAGE-test-&page=1").body()).isArray()).isTrue();
     }
 
     @Test

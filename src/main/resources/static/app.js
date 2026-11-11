@@ -17,7 +17,8 @@ let session,
   currentView = "",
   catalogPage = 0,
   catalogQuery = "",
-  toastTimer;
+  toastTimer,
+  renderRevision = 0;
 const titles = {
   overview: "대시보드",
   targets: "점검 대상",
@@ -278,15 +279,18 @@ document.addEventListener("input", event => {
   if (event.target.closest("#target-form") && ["host", "port"].includes(event.target.name)) resetHostProbe();
 });
 async function catalogView() {
-  const [status, rows] = await Promise.all([
+  const page = catalogPage, query = catalogQuery;
+  const [status, result] = await Promise.all([
     api("/catalog/status"),
     api(
-      "/catalog?query=" +
-        encodeURIComponent(catalogQuery) +
+      "/catalog/page?query=" +
+        encodeURIComponent(query) +
         "&page=" +
-        catalogPage,
+        page,
     ),
   ]);
+  const rows = result.items;
+  const pager = `<div class="form-actions catalog-pager"><button type="button" data-action="catalog-page" data-page="0" ${result.hasPrevious ? "" : "disabled"}>처음</button><button type="button" data-action="catalog-page" data-page="${result.page - 1}" ${result.hasPrevious ? "" : "disabled"}>이전</button><span class="small" aria-live="polite">${result.page + 1} / ${result.totalPages} 페이지 · 전체 ${number(result.total)}건</span><button type="button" data-action="catalog-page" data-page="${result.page + 1}" ${result.hasNext ? "" : "disabled"}>다음</button><button type="button" data-action="catalog-page" data-page="${result.totalPages - 1}" ${result.hasNext ? "" : "disabled"}>마지막</button></div>`;
   return (
     pageHead(
       "취약점 데이터",
@@ -295,7 +299,7 @@ async function catalogView() {
         ? '<a class="button primary" href="#updates">데이터 반입 / 업데이트 →</a>'
         : "",
     ) +
-    `<div class="note">카탈로그 버전 <b>${status.revision}</b> · 최근 반영 ${date(status.imported_at)}<br>목록 출처: ${esc(status.source)}<br>버전 비교는 Maven 패키지를 지원합니다. 다른 생태계의 OSV 항목은 저장·조회만 지원합니다.</div><section class="panel"><form class="search" id="catalog-search"><label>식별자 / 패키지 검색<input name="query" value="${esc(catalogQuery)}" placeholder="CVE, GHSA, CCE 또는 패키지 이름"></label><button type="submit">검색</button></form>` +
+    `<div class="note">카탈로그 버전 <b>${status.revision}</b> · 최근 반영 ${date(status.imported_at)}<br>목록 출처: ${esc(status.source)}<br>버전 비교는 Maven 패키지를 지원합니다. 다른 생태계의 OSV 항목은 저장·조회만 지원합니다.</div><section class="panel"><form class="search" id="catalog-search"><label>식별자 / 패키지 검색<input name="query" value="${esc(query)}" maxlength="200" placeholder="CVE, GHSA, CCE 또는 패키지 이름"></label><button type="submit">검색</button></form>` + pager +
     (rows.length
       ? table(
           ["종류", "식별자", "패키지 / 설정", "제목 · 상태"],
@@ -308,7 +312,7 @@ async function catalogView() {
           "검색 결과가 없습니다",
           "다른 식별자 또는 패키지 이름으로 검색하세요.",
         )) +
-    `<div class="form-actions"><button data-action="catalog-prev" ${catalogPage === 0 ? "disabled" : ""}>이전</button><span class="small">${catalogPage + 1} 페이지 · 최대 50건</span><button data-action="catalog-next" ${rows.length < 50 ? "disabled" : ""}>다음</button></div></section>`
+    pager + "</section>"
   );
 }
 async function updatesView() {
@@ -371,41 +375,30 @@ function systemDetails(report) {
       : empty("OS 상세 미수집", "이전 버전의 결과는 다시 점검하면 OS·RPM 정보를 확인할 수 있습니다.")) +
     '<h3>설치 RPM 패키지</h3>' +
     `<p>${esc(statuses[rpm?.status] || "미수집")} · 수집 항목 ${number(packages.length)}건</p><p class="small">${esc(rpm?.message || "이 스냅샷에서는 RPM을 수집하지 않았습니다.")} 호스트 파일시스템 범위이며 컨테이너별 RPM DB와 RPM CVE 대조는 미지원입니다.</p>` +
-    (packages.length ? table(["이름", "Epoch", "버전", "Release", "아키텍처", "취약점발견"], packages.slice(0, 100).map(p =>
-      `<tr><td>${esc(p.name)}</td><td>${esc(p.epoch)}</td><td>${esc(p.version)}</td><td>${esc(p.release)}</td><td>${esc(p.architecture)}</td><td>점검 불가 (RPM 대조 미지원)</td></tr>`)) : "") +
+    (packages.length ? table(["이름", "Epoch", "버전", "Release", "아키텍처"], packages.slice(0, 100).map(p =>
+      `<tr><td>${esc(p.name)}</td><td>${esc(p.epoch)}</td><td>${esc(p.version)}</td><td>${esc(p.release)}</td><td>${esc(p.architecture)}</td></tr>`)) : "") +
     (packages.length > 100 ? '<p class="small">첫 100건을 표시합니다. 전체 수집 목록은 XLSX·JSON·ZIP에서 확인하세요.</p>' : "");
 }
 async function detail(id) {
-  const report = await api("/jobs/" + encodeURIComponent(id));
-  const all = report.assessment?.findings || [];
-  const found = all.filter((f) => ["발견", "의심"].includes(f.status));
-  const findings = all.slice(0, 500);
-  const count = report.javaProcesses.reduce(
-    (sum, j) => sum + j.libraries.length,
-    0,
-  );
+  const { report, operator } = await api("/jobs/" + encodeURIComponent(id) + "/overview");
+  const actions = operator.actions;
+  const list = (values) => values.map(v => esc(v)).join("<br>");
+  const location = l => l.pid == null ? (l.path || l.asset) : `PID ${l.pid}${l.containerId ? " / " + l.containerId : ""} / ${l.path}`;
   $("#modal-content").innerHTML =
-    `<div class="details-header"><div><p class="eyebrow">INSPECTION REPORT</p><h2>${esc(report.host.name)}</h2></div><span class="badge good">수집 완료</span></div><p class="small">${date(report.collectedAt)} · ${esc(report.host.scope)}</p><div class="actions">${downloads(id)}</div><div class="detail-grid"><div>프로세스<strong>${number(report.processes.length)}</strong></div><div>라이브러리 항목<strong>${number(count)}</strong></div><div>컨테이너<strong>${number(report.containers.length)}</strong></div></div><div class="note">카탈로그 버전 ${report.assessment?.catalogRevision ?? "미실시"} · 발견·의심 ${found.length}건<br>${esc(report.assessment?.scope || "취약점 대조를 실시하지 않았습니다.")}</div><h3>취약점 판정 ${all.length > 500 ? "(첫 500건; 전체는 보고서 다운로드)" : ""}</h3>` +
-    (findings.length
-      ? table(
-          ["종류 / ID", "취약점발견", "대상", "근거"],
-          findings.map(
-            (f) =>
-              `<tr><td>${esc(f.kind)}<br>${esc(f.id || "기준 없음")}</td><td>${badge(f.status)}</td><td>${esc(f.asset)}</td><td>${esc(f.evidence)}</td></tr>`,
-          ),
-        )
-      : empty(
-          "대조 가능한 항목이 없습니다",
-          "라이브러리 식별 정보, 적용 규칙과 수집 제한을 확인하세요.",
-        )) +
-    systemDetails(report) + "<h3>수집 제한 및 오류</h3>" +
-    table(
-      ["계층", "대상", "내용"],
-      report.issues.map(
-        (issue) =>
-          `<tr><td>${esc(issue.layer)}</td><td>${esc(issue.target)}</td><td>${esc(issue.message)}</td></tr>`,
-      ),
-    );
+    `<div class="details-header"><div><p class="eyebrow">INSPECTION REPORT</p><h2>${esc(report.host.name)}</h2></div><span class="badge good">수집 완료</span></div><p class="small">${date(report.collectedAt)} · ${esc(report.host.scope)}</p><div class="actions">${downloads(id)}</div><div class="detail-grid"><div>프로세스<strong>${number(report.processes.length)}</strong></div><div>고유 라이브러리<strong>${number(operator.libraries.length)}</strong></div><div>발견·의심 조치<strong>${number(actions.length)}</strong></div></div><p class="small">카탈로그 개정 ${report.assessment?.catalogRevision ?? "미실시"} · 직군·패키지·버전별 중복 제거. 비대상·미판정은 조치 수에서 제외합니다.</p><h3>발견·의심 조치 ${actions.length > 200 ? "(첫 200건)" : ""}</h3>` +
+    (actions.length ? table(["종류 / ID", "직군 · 패키지", "취약점발견", "심각도", "근거 · 조치"], actions.slice(0, 200).map(a =>
+      `<tr><td><b>${esc(a.id)}</b><div class="small">${esc(a.kind)}</div></td><td>${esc(a.serviceGroup)}<br>${esc(a.packageName)}<br><b>${esc(a.version)}</b></td><td>${badge(a.status)}</td><td>${badge(a.severity)}</td><td><b>${esc(a.title)}</b><p>${list(a.recommendations)}</p><details><summary>근거 · 영향 위치 ${a.locations.length}곳</summary><p>${list(a.evidence)}</p><p>${list(a.locations.map(location))}</p><p class="small">${list(a.aliases)}<br>${list(a.references)}</p></details></td></tr>`))
+      : empty("발견·의심 항목이 없습니다", "미판정은 안전 판정이 아닙니다. 아래 점검 범위를 확인하세요.")) +
+    '<h3>점검 범위</h3>' +
+    `<p class="small">${esc(report.assessment?.scope || "취약점 대조 미실시")} CVE는 라이브러리 위치, 설정은 대상별 규칙 수입니다. 일부 미지원 권고가 있으면 상태별 중복될 수 있습니다.</p>` +
+    table(["종류", "판정", "이유", "항목 수"], operator.coverage.map(c => `<tr><td>${esc(c.kind)}</td><td>${esc(c.status)}</td><td>${esc(c.reason)}</td><td>${number(c.count)}</td></tr>`)) +
+    `<details class="report-section"><summary>라이브러리 명세 · ${number(operator.libraries.length)}개 (직군·버전별)</summary>` +
+    table(["패키지", "버전", "취약점발견", "관련 ID", "식별 · 영향 위치"], operator.libraries.slice(0, 200).map(l =>
+      `<tr><td>${esc(l.name)}</td><td>${esc(l.version)}</td><td>${esc(l.status)}</td><td>${list(l.advisories)}</td><td><details><summary>위치 ${l.locations.length}곳</summary><p>${list(l.evidence)}</p>${list(l.locations.map(location))}</details></td></tr>`)) +
+    '<p class="small">첫 200개를 표시합니다. 직군별 전체 명세와 원문은 XLSX·ZIP·JSON으로 내려받을 수 있습니다.</p></details>' +
+    '<details class="report-section"><summary>OS·커널 · 설치 RPM 명세</summary>' + systemDetails(report) + '</details>' +
+    `<details class="report-section"><summary>수집 제한 · 오류 ${operator.issues.length}종류</summary>` +
+    table(["계층", "대상", "내용"], operator.issues.map(i => `<tr><td>${esc(i.layer)}</td><td>${list(i.targets)}</td><td>${esc(i.message)}</td></tr>`)) + '</details>';
   $("#modal").showModal();
 }
 async function render() {
@@ -415,6 +408,7 @@ async function render() {
   if (["users", "updates"].includes(currentView) && !admin())
     currentView = "overview";
   const view = currentView;
+  const revision = ++renderRevision;
   document
     .querySelectorAll("[data-view]")
     .forEach((link) =>
@@ -438,9 +432,9 @@ async function render() {
       updates: updatesView,
       users: usersView,
     }[view]();
-    if (currentView === view) $("#content").innerHTML = html;
+    if (revision === renderRevision && currentView === view) $("#content").innerHTML = html;
   } catch (error) {
-    toast(error.message);
+    if (revision === renderRevision) toast(error.message);
   }
 }
 document.addEventListener("click", async (event) => {
@@ -486,12 +480,8 @@ document.addEventListener("click", async (event) => {
       case "detail":
         await detail(button.dataset.id);
         break;
-      case "catalog-prev":
-        catalogPage = Math.max(0, catalogPage - 1);
-        await render();
-        break;
-      case "catalog-next":
-        catalogPage++;
+      case "catalog-page":
+        catalogPage = Number(button.dataset.page);
         await render();
         break;
       case "update-now":

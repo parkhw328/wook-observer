@@ -60,6 +60,27 @@ class LibraryScannerTest {
     }
 
     @Test
+    void prefersMavenAfterManifestAndRetainsEveryNestedShadedComponent() throws Exception {
+        var entries = new java.util.LinkedHashMap<String, byte[]>();
+        entries.put("META-INF/MANIFEST.MF", "Manifest-Version: 1.0\r\nImplementation-Title: wrong-title\r\nImplementation-Version: 9.9\r\n\r\n".getBytes(StandardCharsets.UTF_8));
+        entries.put("META-INF/maven/org.example/a/pom.properties", "groupId=org.example\nartifactId=a\nversion=1.2\n".getBytes(StandardCharsets.UTF_8));
+        byte[] single = archive(entries);
+        entries.put("META-INF/maven/org.example/b/pom.properties", "groupId=org.example\nartifactId=b\nversion=2.3\n".getBytes(StandardCharsets.UTF_8));
+        Path jar = directory.resolve("app.jar");
+        Files.write(jar, archive(Map.of("BOOT-INF/lib/a-1.2.jar", single, "BOOT-INF/lib/shaded.jar", archive(entries))));
+        var libraries = new ArrayList<Library>();
+        var issues = new ArrayList<Issue>();
+        new LibraryScanner(new ObserverProperties()).inspect(jar, "app.jar", libraries, issues, "123");
+        assertThat(libraries).anySatisfy(l -> {
+            assertThat(l.path()).isEqualTo("app.jar!/BOOT-INF/lib/a-1.2.jar");
+            assertThat(l.name()).isEqualTo("org.example:a");
+            assertThat(l.version()).isEqualTo("1.2");
+        });
+        assertThat(libraries.stream().filter(l -> l.path().contains("shaded.jar!/")).map(Library::name)).containsExactlyInAnyOrder("org.example:a", "org.example:b");
+        assertThat(issues).isEmpty();
+    }
+
+    @Test
     void shadedJarRetainsAllMavenArtifactsWithoutMisidentifyingTheArchive() throws Exception {
         Path jar = directory.resolve("shaded.jar");
         Files.write(jar, archive(Map.of(

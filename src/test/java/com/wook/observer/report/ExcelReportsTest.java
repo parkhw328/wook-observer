@@ -36,14 +36,15 @@ class ExcelReportsTest {
                 base.containers(), base.issues(), base.facts(), null, parser.build(new java.util.ArrayList<>()));
         var docs = reports.documents(report);
         assertThat(docs.get("host/os.md")).contains("uname -r", "5.14");
-        assertThat(docs.get("host/rpm-packages.md")).contains("1.2", "3.el9", "x86&#95;64", "RPM 대조 미지원");
+        assertThat(docs.get("host/rpm-packages.md")).contains("1.2", "3.el9", "x86&#95;64", "RPM CVE 대조는 미지원");
         try (var workbook = workbook(report, docs)) {
             assertThat(summaryValue(workbook, "RPM 수집 항목 수")).isEqualTo(1);
             var row = workbook.getSheet("RPM 패키지").getRow(3);
             assertThat(row.getCell(0).getCellType()).isEqualTo(CellType.STRING);
             assertThat(row.getCell(0).getStringCellValue()).isEqualTo("=hostile()");
             assertThat(row.getCell(5).getStringCellValue()).isEqualTo("=hostile()-2:1.2-3.el9.x86_64");
-            assertThat(row.getCell(6).getStringCellValue()).contains("점검 불가");
+            assertThat(row.getCell(6)).isNull();
+            assertThat(workbook.getSheet("RPM 패키지").getRow(1).getCell(0).getStringCellValue()).contains("CVE 대조 미지원");
             assertThat(restoredSources(workbook)).isEqualTo(docs);
         }
     }
@@ -53,7 +54,7 @@ class ExcelReportsTest {
         var report = ReportFixtures.sample();
         var originals = reports.documents(report);
         try (var workbook = workbook(report, originals)) {
-            assertThat(workbook.getNumberOfSheets()).isEqualTo(32);
+            assertThat(workbook.getNumberOfSheets()).isEqualTo(33);
             assertThat(workbook.getStylesSource().getCTStylesheet().getCellStyles().getCellStyleArray(0).getName()).isEqualTo("Normal");
             assertThat(restoredSources(workbook)).isEqualTo(originals);
             for (ServiceCategory category : ServiceCategory.values()) {
@@ -62,9 +63,9 @@ class ExcelReportsTest {
                 assertThat(workbook.getSheet(category.label() + "_컨테이너")).isNotNull();
             }
             assertThat(summaryValue(workbook, "프로세스 수")).isEqualTo(1);
-            assertThat(summaryValue(workbook, "라이브러리 항목 수(프로세스별 중복 포함)")).isEqualTo(1);
+            assertThat(summaryValue(workbook, "고유 라이브러리 수(직군·버전별)")).isEqualTo(1);
             assertThat(summaryValue(workbook, "수집 오류 수")).isEqualTo(1);
-            assertThat(workbook.getSheet("애플리케이션_오픈소스").getRow(3).getCell(2).getStringCellValue()).isEqualTo("1.2.3");
+            assertThat(workbook.getSheet("애플리케이션_오픈소스").getRow(3).getCell(1).getStringCellValue()).isEqualTo("1.2.3");
             assertThat(workbook.getSheet("컨테이너 연결").getLastRowNum()).isEqualTo(5);
             assertThat(workbook.getSheet("수집 오류").getRow(3).getCell(2).getStringCellValue()).isEqualTo("권한 부족");
             assertThat(workbook.getSheet("JVM 속성").getRow(3).getCell(5).getStringCellValue()).isEqualTo("21.0.13");

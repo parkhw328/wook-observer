@@ -70,6 +70,9 @@ final class SshTransport {
                 inventory = new String(resource.readAllBytes(), StandardCharsets.UTF_8).replace("# SYSTEM_INVENTORY",
                         com.wook.observer.collector.SystemInventoryCollector.script());
             }
+            try (var resource = new ClassPathResource("collector/ssh-libraries.py").getInputStream()) {
+                inventory = inventory.replace("# LIBRARY_INVENTORY", new String(resource.readAllBytes(), StandardCharsets.UTF_8));
+            }
             var handshake = new PrivilegeHandshake(mode, UUID.randomUUID().toString().replace("-", ""),
                     elevate ? targets.decrypt(target, "privilege_password") : "");
             command.addAll(List.of("-p", port, Store.string(target, "ssh_user") + "@" + host,

@@ -64,73 +64,7 @@ done
 if [ -n "$java_pids" ]; then
   if command -v python3 >/dev/null 2>&1; then
     python3 - <<'PY'
-import os, glob, json, zipfile, io, re
-
-def emit(kind, value):
-    print(kind + '\t' + json.dumps(value, ensure_ascii=True))
-
-def properties(data):
-    result = {}
-    for line in data.decode('utf-8', 'replace').splitlines():
-        if '=' in line and not line.startswith('#'):
-            key, value = line.split('=', 1)
-            result[key.strip()] = value.strip()
-    return result
-
-def metadata(archive, path):
-    for info in archive.infolist()[:4096]:
-        if info.filename.startswith('META-INF/maven/') and info.filename.endswith('/pom.properties') and info.file_size < 65536:
-            props = properties(archive.read(info))
-            if props.get('groupId') and props.get('artifactId') and props.get('version'):
-                return props['groupId'] + ':' + props['artifactId'], props['version'], 'Maven pom.properties'
-    name = path.rsplit('/', 1)[-1]
-    match = re.match(r'(.+)-([0-9][A-Za-z0-9.+_-]*)\.jar$', name)
-    return (match.group(1), match.group(2), 'filename inference') if match else (name, '', 'version unavailable')
-
-java_count = 0
-for proc in glob.glob('/proc/[0-9]*'):
-    try:
-        if open(proc + '/comm').read().strip() != 'java': continue
-        java_count += 1
-        if java_count > 64: break
-        pid = int(proc.rsplit('/', 1)[1])
-        with open(proc + '/cmdline', 'rb') as f: args = f.read(65536).decode('utf-8', 'replace').split('\0')
-        # Arguments are used only to locate archives and are never emitted.
-        paths = []
-        for i, value in enumerate(args[:-1]):
-            if value in ('-jar', '-cp', '-classpath', '--class-path', '--module-path', '-p'):
-                paths.extend(args[i + 1].split(':'))
-        for fd in glob.glob(proc + '/fd/*')[:2048]:
-            try:
-                value = os.readlink(fd)
-                if value.endswith('.jar'): paths.append(value)
-            except OSError: pass
-        if not paths:
-            emit('LIBISSUE', {'pid': pid, 'message': 'No readable JAR paths; custom class loaders/environment classpaths not assessed'})
-        seen, count, expanded = set(), 0, 0
-        for path in paths[:128]:
-            source = proc + ('/root' + path if path.startswith('/') else '/cwd/' + path)
-            candidates = glob.glob(source + '.jar') if source.endswith('/*') else [source]
-            for candidate in candidates[:512]:
-                if not candidate.endswith(('.jar', '.war')) or candidate in seen: continue
-                seen.add(candidate)
-                if count >= 512: raise ValueError('library limit 512')
-                if os.path.getsize(candidate) > 536870912: raise ValueError('archive exceeds 512 MiB')
-                with zipfile.ZipFile(candidate) as archive:
-                    name, version, evidence = metadata(archive, path)
-                    emit('LIBRARY', {'pid': pid, 'name': name, 'version': version, 'path': path, 'evidence': evidence})
-                    count += 1
-                    for info in archive.infolist()[:4096]:
-                        if not (info.filename.startswith(('BOOT-INF/lib/', 'WEB-INF/lib/')) and info.filename.endswith('.jar')): continue
-                        if count >= 512 or info.file_size > 16777216 or expanded + info.file_size > 67108864:
-                            raise ValueError('nested library inspection limit')
-                        expanded += info.file_size
-                        with zipfile.ZipFile(io.BytesIO(archive.read(info))) as nested:
-                            name, version, evidence = metadata(nested, info.filename)
-                            emit('LIBRARY', {'pid': pid, 'name': name, 'version': version, 'path': path + '!/' + info.filename, 'evidence': evidence})
-                            count += 1
-    except (OSError, ValueError, zipfile.BadZipFile, RuntimeError):
-        emit('LIBISSUE', {'pid': int(proc.rsplit('/', 1)[1]), 'message': 'Some archives unavailable, invalid, or inspection limit exceeded'})
+# LIBRARY_INVENTORY
 PY
   else printf 'ISSUE\tjava\tPython 3 unavailable; archive metadata not assessed. Java installation is not required for base inventory.\n'; fi
 fi

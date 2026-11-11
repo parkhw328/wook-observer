@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Assemble the verified 1.3.0 images and public catalogs into an air-gap bundle.
+"""Assemble the verified 1.4.0 images and public catalogs into an air-gap bundle.
 
 Runs only on the preparation machine. Never exports live containers, .env, or DB volumes.
 """
@@ -15,9 +15,9 @@ import tarfile
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "1.3.0"
+VERSION = "1.4.0"
 IMAGES = [
-    ("wook-observer:1.3.0", "wook-observer-1.3.0.tar.gz"),
+    ("wook-observer:1.4.0", "wook-observer-1.4.0.tar.gz"),
     ("postgres:18.6-bookworm", "postgres-18.6-bookworm.tar.gz"),
 ]
 
@@ -104,7 +104,7 @@ def prepare(bundle):
     # Read application seed and documentation from the same immutable source tag as the shipped application.
     seed = run("git", "show", f"{commit}:src/main/resources/catalog/bootstrap.json", capture_output=True).stdout
     (bundle / "updates/catalog.json").write_bytes(seed)
-    for source, destination in (("LICENSE", "LICENSE"), ("README.md", "docs/application-readme.md"), ("docs/catalog.md", "docs/catalog.md"), ("docs/ssh-access.md", "docs/ssh-access.md"), ("docs/runtime-decision.md", "docs/runtime-decision.md"), ("docs/interface.md", "docs/interface.md")):
+    for source, destination in (("LICENSE", "LICENSE"), ("README.md", "docs/application-readme.md"), ("docs/catalog.md", "docs/catalog.md"), ("docs/ssh-access.md", "docs/ssh-access.md"), ("docs/runtime-decision.md", "docs/runtime-decision.md"), ("docs/interface.md", "docs/interface.md"), ("docs/operator-report.md", "docs/operator-report.md")):
         (bundle / destination).write_bytes(run("git", "show", f"{commit}:{source}", capture_output=True).stdout)
     source_archive = bundle / f"source/wook-observer-{VERSION}-source.tar.gz"
     run("git", "archive", "--format=tar.gz", f"--prefix=wook-observer-{VERSION}-source/", "--output", str(source_archive), commit)

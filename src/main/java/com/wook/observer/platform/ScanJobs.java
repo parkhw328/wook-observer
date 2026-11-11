@@ -60,7 +60,7 @@ public class ScanJobs implements ApplicationRunner {
         try {
             store.jdbc.update("UPDATE scan_job SET status = 'RUNNING' WHERE id = ?", id);
             Observation report = assessor.assess(collector.collect(target));
-            long count = report.assessment().findings().stream().filter(f -> "발견".equals(f.status()) || "의심".equals(f.status())).count();
+            long count = com.wook.observer.report.OperatorReport.from(report).actions().size();
             store.jdbc.update("UPDATE scan_job SET status = 'COMPLETED', finished_at = ?, report_json = ?, finding_count = ?, message = ? WHERE id = ?",
                     Instant.now().toString(), json.writeValueAsString(report), count, "수집 완료; 수집 한계와 취약점 판정 범위를 확인하세요.", id);
         } catch (Exception e) { fail(id, e instanceof ApiProblem ? e.getMessage() : "점검 실패. SSH 연결·대상 도구·접근 권한을 확인하세요."); }

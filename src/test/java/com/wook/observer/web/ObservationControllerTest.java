@@ -65,7 +65,7 @@ class ObservationControllerTest {
         assertThat(response.headers().firstValue("Content-Disposition").orElseThrow()).contains("wook-observer-report.xlsx");
         assertThat(response.headers().firstValue("Cache-Control")).contains("no-store");
         try (var workbook = new XSSFWorkbook(new ByteArrayInputStream(response.body()))) {
-            assertThat(workbook.getNumberOfSheets()).isEqualTo(32);
+            assertThat(workbook.getNumberOfSheets()).isEqualTo(33);
             assertThat(workbook.getSheet("JSON 원문")).isNotNull();
         }
     }

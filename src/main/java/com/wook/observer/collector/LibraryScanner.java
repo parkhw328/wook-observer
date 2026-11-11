@@ -140,39 +140,57 @@ public class LibraryScanner {
                     break;
                 }
                 String location = display + "!/" + entry.getName();
-                Library library = fromFilename(location);
+                List<Library> found = List.of(fromFilename(location));
                 try (var input = archive.getInputStream(entry)) {
                     if (entry.getSize() > NESTED_JAR_LIMIT) {
                         throw new IOException("Nested archive limit");
                     }
                     byte[] bytes = input.readNBytes(NESTED_JAR_LIMIT + 1);
                     if (bytes.length > NESTED_JAR_LIMIT) { throw new IOException("Nested archive limit"); }
-                    library = inspectNested(bytes, location, library);
+                    found = inspectNested(bytes, location, found.getFirst());
                 } catch (Exception exception) {
                     issues.add(new Issue("library", target, "중첩 JAR 메타데이터 읽기 제한/실패; 파일명 근거 사용: " + location));
                 }
-                libraries.add(library);
+                int available = properties.getMaxJarsPerProcess() - libraries.size();
+                libraries.addAll(found.subList(0, Math.min(available, found.size())));
+                if (found.size() > available) { issues.add(new Issue("library", target, "중첩 Maven 메타데이터 수 제한: " + location)); }
             }
         } catch (Exception exception) {
             issues.add(new Issue("library", target, "JAR 읽기 또는 메타데이터 해석 실패: " + display));
         }
     }
 
-    private Library inspectNested(byte[] bytes, String display, Library fallback) throws IOException {
+    private List<Library> inspectNested(byte[] bytes, String display, Library fallback) throws IOException {
         try (ZipInputStream jar = new ZipInputStream(new ByteArrayInputStream(bytes))) {
             int remaining = 32 * 1024 * 1024;
             byte[] buffer = new byte[8192];
+            List<Library> artifacts = new ArrayList<>();
             for (int count = 0; count < 10000; count++) {
                 ZipEntry entry = jar.getNextEntry();
-                if (entry == null) { return fallback; }
+                if (entry == null) {
+                    if (artifacts.isEmpty()) { return List.of(fallback); }
+                    if (artifacts.size() == 1) {
+                        Library artifact = artifacts.getFirst();
+                        return List.of(library(artifact.name(), artifact.version(), display, artifact.evidence()));
+                    }
+                    List<Library> result = new ArrayList<>();
+                    result.add(fallback);
+                    result.addAll(artifacts);
+                    return result;
+                }
                 if (entry.getName().equals("META-INF/MANIFEST.MF")) {
-                    Library manifest = fromManifest(new Manifest(new ByteArrayInputStream(metadata(jar))), display, fallback);
-                    if (!manifest.evidence().equals(fallback.evidence())) { return manifest; }
+                    byte[] data = metadata(jar);
+                    remaining -= data.length;
+                    fallback = fromManifest(new Manifest(new ByteArrayInputStream(data)), display, fallback);
                 }
                 if (entry.getName().startsWith("META-INF/maven/") && entry.getName().endsWith("/pom.properties")) {
-                    Library pom = fromPom(metadata(jar), display);
-                    if (pom != null) { return pom; }
+                    byte[] data = metadata(jar);
+                    remaining -= data.length;
+                    Library pom = fromPom(data, display + "!/" + entry.getName());
+                    if (pom != null) { artifacts.add(pom); }
+                    if (artifacts.size() > properties.getMaxJarsPerProcess()) { throw new IOException("Maven metadata limit"); }
                 }
+                if (remaining < 0) { throw new IOException("Expanded metadata scan limit"); }
                 int read;
                 while ((read = jar.read(buffer)) != -1) {
                     remaining -= read;

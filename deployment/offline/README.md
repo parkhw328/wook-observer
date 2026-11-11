@@ -1,4 +1,4 @@
-# Wook Observer 1.3.0 폐쇄망 설치 안내
+# Wook Observer 1.4.0 폐쇄망 설치 안내
 
 이 묶음은 **Linux x86_64(amd64)** 서버의 신규 설치용입니다. Docker Engine과 `docker compose`가 설치된 서버에서 앱·PostgreSQL·취약점 데이터를 인터넷 없이 사용할 수 있습니다.
 
@@ -114,13 +114,13 @@ cp .env "backups/environment-$backup_stamp.env"
 
 | 경로 | 내용 |
 | --- | --- |
-| `images/wook-observer-1.3.0.tar.gz` | 실행 JAR·Java·SSH 클라이언트·보고서 라이브러리가 포함된 앱 이미지 전체 레이어 |
+| `images/wook-observer-1.4.0.tar.gz` | 실행 JAR·Java·SSH 클라이언트·보고서 라이브러리가 포함된 앱 이미지 전체 레이어 |
 | `images/postgres-18.6-bookworm.tar.gz` | PostgreSQL 이미지 전체 레이어 |
 | `images/images.list` | 이미지 태그, 실행 설정·파일시스템 레이어의 SHA-256, 파일명 |
 | `compose.yaml` | 빌드 항목 없이 `pull_policy: never`를 지정한 오프라인 실행 구성 |
 | `install.sh`, `start.sh`, `stop.sh`, `status.sh`, `logs.sh`, `verify.sh` | 설치·운영·파일 확인 도구 |
 | `updates/` | Maven ZIP·출처 기록·시작용 CVE/CCE/정책 JSON |
-| `source/` | `v1.3.0` 애플리케이션 Git 소스 스냅샷. 소스 재빌드에는 별도의 Maven 의존성 반입 필요 |
+| `source/` | `v1.4.0` 애플리케이션 Git 소스 스냅샷. 소스 재빌드에는 별도의 Maven 의존성 반입 필요 |
 | `PACKAGE-MANIFEST.json` | 앱 버전·원본 커밋·플랫폼·내보내기 전 이미지 ID·실행 내용 해시·데이터 출처 |
 | `SHA256SUMS` | 변경하지 않은 반입 파일 전체의 SHA-256 |
 | `VERIFICATION.md` | 묶음으로 수행한 오프라인 기동·데이터 반영 검증 결과 |

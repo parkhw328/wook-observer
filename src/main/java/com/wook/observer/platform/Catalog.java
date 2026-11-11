@@ -46,14 +46,29 @@ public class Catalog {
 
     public List<Map<String, Object>> search(String query, int page) {
         int offset = Math.max(0, Math.min(page, 10000)) * 50;
-        String pattern = "%" + query.toLowerCase().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
-        return store.rows("SELECT advisory_id, kind, package_name, document FROM catalog_entry WHERE LOWER(advisory_id) LIKE ? ESCAPE '\\' OR LOWER(package_name) LIKE ? ESCAPE '\\' OR LOWER(document) LIKE ? ESCAPE '\\' ORDER BY advisory_id LIMIT 50 OFFSET ?",
+        String pattern = "%" + query.toLowerCase(java.util.Locale.ROOT).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
+        return store.rows("SELECT advisory_id, kind, package_name, document FROM catalog_entry WHERE LOWER(advisory_id) LIKE ? ESCAPE '\\' OR LOWER(package_name) LIKE ? ESCAPE '\\' OR LOWER(document) LIKE ? ESCAPE '\\' ORDER BY advisory_id, kind LIMIT 50 OFFSET ?",
                 pattern, pattern, pattern, offset).stream().map(row -> {
             var result = new LinkedHashMap<>(row);
             result.put("document", json.readTree(Store.string(row, "document")));
             return (Map<String, Object>) result;
         }).toList();
     }
+
+    /** Kept separate from the legacy list endpoint to preserve existing clients. */
+    public synchronized Page page(String query, int requestedPage) {
+        if (query.length() > 200 || requestedPage < 0 || requestedPage > 10000) {
+            throw new ApiProblem(400, "검색어 200자, 페이지 0~10000 범위로 요청하세요.");
+        }
+        String pattern = "%" + query.toLowerCase(java.util.Locale.ROOT).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
+        long total = store.jdbc.queryForObject("SELECT COUNT(*) FROM catalog_entry WHERE LOWER(advisory_id) LIKE ? ESCAPE '\\' OR LOWER(package_name) LIKE ? ESCAPE '\\' OR LOWER(document) LIKE ? ESCAPE '\\'", Long.class, pattern, pattern, pattern);
+        int pages = (int) Math.max(1, (total + 49) / 50);
+        int page = Math.min(requestedPage, pages - 1);
+        return new Page(search(query, page), page, 50, total, pages, page > 0, page + 1 < pages);
+    }
+
+    public record Page(List<Map<String, Object>> items, int page, int size, long total, int totalPages,
+                       boolean hasPrevious, boolean hasNext) { }
 
     public synchronized Map<String, Object> importBytes(byte[] bytes, String source) {
         String run = UUID.randomUUID().toString();

@@ -139,7 +139,7 @@ public class SshCollector {
         String scope = isolated ? "SSH 컨테이너 네임스페이스" : "SSH Linux 호스트";
         scope += facts.containsKey("host:effective_uid") ? " / 실행 계정 " + facts.get("host:effective_user") + " (UID " + facts.get("host:effective_uid") + ")" : " (계정 접근 범위)";
         var inventory = system.build(issues);
-        return new Observation("1.3.0", Instant.now(), new Observation.Host(host[1], "Linux", host[2], host[3], Integer.parseInt(host[4]),
+        return new Observation("1.4.0", Instant.now(), new Observation.Host(host[1], "Linux", host[2], host[3], Integer.parseInt(host[4]),
                 (long) Double.parseDouble(host[5]), scope, dockerVersion), linked, java, containers, issues, facts, null, inventory);
     }
 }

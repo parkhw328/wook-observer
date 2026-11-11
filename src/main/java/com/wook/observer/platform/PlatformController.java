@@ -33,7 +33,7 @@ public class PlatformController {
     @GetMapping("/session")
     public Map<String, Object> session(Authentication auth, CsrfToken csrf) {
         String role = auth == null ? "" : auth.getAuthorities().stream().findFirst().map(Object::toString).orElse("").replace("ROLE_", "");
-        return Map.of("username", auth == null ? "" : auth.getName(), "role", role, "csrf", csrf.getToken(), "csrfHeader", csrf.getHeaderName(), "version", "1.3.0");
+        return Map.of("username", auth == null ? "" : auth.getName(), "role", role, "csrf", csrf.getToken(), "csrfHeader", csrf.getHeaderName(), "version", "1.4.0");
     }
     @GetMapping("/targets") public List<Map<String, Object>> targets() { return targets.list(); }
     @GetMapping("/admin/targets/{id}") public Map<String, Object> target(@PathVariable String id) {
@@ -47,6 +47,10 @@ public class PlatformController {
         return ResponseEntity.accepted().body(Map.of("id", jobs.start(id, auth.getName())));
     }
     @GetMapping("/jobs/{id}") public Observation report(@PathVariable String id) { return jobs.report(id); }
+    @GetMapping("/jobs/{id}/overview") public Map<String, Object> overview(@PathVariable String id) {
+        var report = jobs.report(id);
+        return Map.of("report", report, "operator", com.wook.observer.report.OperatorReport.from(report));
+    }
     @GetMapping("/jobs/{id}/download/{format}")
     public ResponseEntity<byte[]> download(@PathVariable String id, @PathVariable String format) throws IOException {
         var report = jobs.report(id);
@@ -63,6 +67,9 @@ public class PlatformController {
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"wook-observer-" + id + "." + format + "\"").body(bytes);
     }
     @GetMapping("/catalog/status") public Map<String, Object> catalogStatus() { return catalog.status(); }
+    @GetMapping("/catalog/page") public Catalog.Page catalogPage(@RequestParam(defaultValue = "") String query, @RequestParam(defaultValue = "0") int page) {
+        return catalog.page(query, page);
+    }
     @GetMapping("/catalog") public List<Map<String, Object>> catalog(@RequestParam(defaultValue = "") String query, @RequestParam(defaultValue = "0") int page) {
         if (query.length() > 200) { throw new ApiProblem(400, "검색어는 200자 이내로 입력하세요."); }
         return catalog.search(query, page);

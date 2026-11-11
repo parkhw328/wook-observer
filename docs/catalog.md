@@ -37,10 +37,12 @@
 
 외부 준비 PC의 `python3 scripts/prepare-maven-catalog.py`는 공식 `Maven/all.zip`을 받아 `updates/maven-osv.zip`과 `.manifest.json` 출처 기록을 생성합니다. 컨테이너는 다운로드하지 않으며 관리자 갱신으로만 반영합니다. 이 파일은 Git에 넣지 않습니다. 용량 상한을 넘는 미래 덤프는 묶음을 나눠 반입해야 합니다.
 
-- 현재 자동 비교는 **Maven**의 정확한 `groupId:artifactId`와 라이브러리 버전에 한정합니다.
+- 자동 비교는 **Maven** 패키지와 버전 범위입니다. `pom.properties`의 정확한 `groupId:artifactId`를 우선하며 Manifest가 먼저 있어도 탐색을 계속합니다. 묶음 JAR의 여러 Maven 항목과 중첩 JAR를 보존합니다.
+- 좌표가 없는 JAR는 파일명의 정확한 artifactId와 수집 버전이 일치하고 내부 카탈로그의 groupId 후보가 하나일 때만 후보 대조합니다. 영향 범위에 들면 **의심**이며 좌표 확인이 필요합니다. 여러 후보·버전 모순은 미판정입니다.
 - `ECOSYSTEM` 범위의 `introduced`, 배타적 `fixed`·`limit`, 포함되는 `last_affected`와 명시적 `versions`를 지원합니다. Maven `ComparableVersion`으로 비교합니다.
-- `versions`에 없다는 이유만으로 미발견을 판정하지 않습니다. 해석할 수 없는 범위, 식별 정보 부족, 저장된 기준 부재는 점검 불가입니다.
-- CVE alias가 있으면 보고서에 CVE ID를 표시합니다. CVE alias가 없는 OSV 권고도 원래 ID로 보존합니다.
+- `versions`에 없다는 이유만으로 미발견을 판정하지 않습니다. 해석할 수 없는 범위, 식별 정보 부족, 저장된 기준 부재는 미판정입니다.
+- CVE alias가 있으면 대표 CVE ID를 표시하며 원래 권고 ID와 모든 별칭을 보존합니다. CVE alias가 없는 OSV 권고도 원래 ID로 보존합니다. 동일 ID·직군·패키지·버전은 한 조치로 묶습니다.
+- 설치 버전이 들어 있는 영향 구간의 `fixed`를 수정 경계로 안내합니다. 다른 분기의 수정 버전을 일괄 권고하지 않으며 여러 CVE의 영향과 호환성을 함께 검토해야 합니다. `limit`는 수정 버전으로 안내하지 않습니다.
 - 존재하는 파일의 버전 대조이며 실제 클래스 로딩, 배포판 backport, 런타임 도달성, 설정에 따른 악용 여부를 증명하지 않습니다.
 
 ## CCE와 내부 정책
@@ -54,7 +56,7 @@ CCE는 설정 식별자이며 실행 코드가 아닙니다. 공식 근거와 �
 | `docker.privileged`, `docker.readOnlyRootfs` | Docker inspect의 불리언 문자열 `true` / `false` |
 | `docker.user` | Docker Config.User 원문. 빈 문자열은 이미지 설정상 기본 사용자이며 실제 실행 UID 증명은 아님 |
 
-`platform`은 `/etc/os-release`의 `ID:VERSION_ID의 대버전`으로 지정합니다(예: `rhel:9`). `any`는 POLICY만 허용합니다. 적용 플랫폼이 일치하지 않거나 값이 없으면 점검 불가로 기록합니다. 업로드한 셸·정규식·임의 명령을 실행하는 규칙은 지원하지 않습니다.
+`platform`은 `/etc/os-release`의 `ID:VERSION_ID의 대버전`으로 지정합니다(예: `rhel:9`). `any`는 POLICY만 허용합니다. 알려진 플랫폼이 일치하지 않으면 비대상, 플랫폼이나 설정 값이 없으면 미판정입니다. 둘 다 취약점 조치 목록과 건수에서 제외하고 점검 범위에 집계합니다. 플랫폼이 맞고 실제 값이 기대값에 어긋날 때만 발견입니다. 업로드한 셸·정규식·임의 명령을 실행하는 규칙은 지원하지 않습니다.
 
 ## 갱신 정책
 

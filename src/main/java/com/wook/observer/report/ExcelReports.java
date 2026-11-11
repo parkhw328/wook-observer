@@ -48,6 +48,8 @@ public class ExcelReports {
             workbook.getXSSFWorkbook().getProperties().getCoreProperties().setCreator("Wook Observer");
             workbook.getXSSFWorkbook().getProperties().getCoreProperties().setTitle("서버 점검 통합 보고서");
             Styles styles = new Styles(workbook);
+            var operator = OperatorReport.from(report);
+            var statuses = report.assessment() == null ? Map.<String, String>of() : report.assessment().statuses();
             List<Table> tables = new ArrayList<>();
             Map<Long, Observation.ProcessInfo> byPid = new LinkedHashMap<>();
             report.processes().forEach(process -> byPid.put(process.pid(), process));
@@ -62,7 +64,9 @@ public class ExcelReports {
             summary.add("Java 프로세스 수", report.javaProcesses().size());
             summary.add("컨테이너 수", report.containers().size());
             summary.add("컨테이너 연결 프로세스 수", report.processes().stream().filter(process -> !process.containerId().isBlank()).count());
-            summary.add("라이브러리 항목 수(프로세스별 중복 포함)", report.javaProcesses().stream().mapToLong(java -> java.libraries().size()).sum());
+            summary.add("고유 라이브러리 수(직군·버전별)", operator.libraries().size());
+            summary.add("발견 조치 수", operator.actions().stream().filter(a -> "발견".equals(a.status())).count());
+            summary.add("의심 조치 수", operator.actions().stream().filter(a -> "의심".equals(a.status())).count());
             summary.add("수집 오류 수", report.issues().size());
             summary.add("RPM 수집 상태", report.systemInventory().rpm().status().label());
             summary.add("RPM 수집 항목 수", report.systemInventory().rpm().packages().size());
@@ -70,12 +74,20 @@ public class ExcelReports {
                 summary.add("취약점 데이터 버전", report.assessment().catalogRevision());
                 summary.add("취약점 데이터 반영 시각", report.assessment().catalogUpdatedAt());
                 summary.add("취약점 판정 범위", report.assessment().scope());
-                Table findings = table(workbook, styles, tables, "취약점 상세", "발견은 기준과의 일치이며 악용 가능성을 확정하지 않습니다. 점검 불가를 안전으로 해석하지 마세요.",
-                        "종류", "ID", "대상", "취약점발견", "심각도", "제목", "근거", "참조");
-                report.assessment().findings().forEach(f -> findings.add(f.kind(), f.id(), f.asset(), f.status(), f.severity(), f.title(), f.evidence(), f.reference()));
+                Table findings = table(workbook, styles, tables, "취약점 상세", "발견·의심만 표시합니다. ID·직군·패키지·버전별로 묶고 영향 위치를 보존합니다.",
+                        "종류", "ID", "직군", "패키지", "설치 버전", "취약점발견", "심각도", "제목", "영향 위치", "근거", "조치", "참조", "권고 ID·별칭");
+                operator.actions().forEach(a -> findings.add(a.kind(), a.id(), a.serviceGroup(), a.packageName(), a.version(), a.status(), a.severity(), a.title(),
+                        String.join("; ", a.locations().stream().map(OperatorReport.Location::label).toList()), String.join("; ", a.evidence()),
+                        String.join("; ", a.recommendations()), String.join("; ", a.references()), String.join(", ", a.aliases())));
                 Row link = summary.add("취약점 상세", "시트 열기");
                 summary.link(link.getCell(1), findings.name(), 0);
             }
+            Table coverage = table(workbook, styles, tables, "점검 범위", "미판정·비대상은 조치 수에서 제외합니다. CVE는 라이브러리 위치, 설정은 대상별 규칙 수이며 상태별 중복이 가능합니다.",
+                    "종류", "판정", "이유", "항목 수");
+            operator.coverage().forEach(c -> coverage.add(c.kind(), c.status(), c.reason(), c.count()));
+            if (report.assessment() == null) { coverage.add("전체", "미실시", "중앙 웹서비스에서 취약점 대조 필요", 0); }
+            Row coverageLink = summary.add("점검 범위", "시트 열기");
+            summary.link(coverageLink.getCell(1), coverage.name(), 0);
             summary.add("원문 문서 수", documents.size());
             summary.add("해석 주의", "라이브러리 발견은 실제 로딩이나 오픈소스 여부·라이선스 확인을 의미하지 않습니다. Java 수에는 수집기 자체가 포함될 수 있습니다.");
             summary.add("관측 한계", "RPM 외 패키지 상세, RPM CVE 대조, 컨테이너별 RPM DB, 동적 클래스 로더, systemd, 호스트 리스닝 포트, Kubernetes 계층은 미지원입니다. SSH와 로컬 수집의 도구·권한 차이는 수집 오류를 확인하세요.");
@@ -98,9 +110,9 @@ public class ExcelReports {
             if (report.systemInventory().os().isEmpty()) { os.add("OS 상세", "", "미수집", "이전 스냅샷은 재점검 필요"); }
             var rpm = report.systemInventory().rpm();
             Table packages = table(workbook, styles, tables, "RPM 패키지", rpm.status().label() + ": " + rpm.message()
-                    + " 근거: rpm -qa --qf (NAME, EPOCH, VERSION, RELEASE, ARCH). Epoch 미지정=0. 20초·20,000건·4 MiB 제한. 호스트 파일시스템 범위.",
-                    "이름", "Epoch", "버전", "Release", "아키텍처", "NEVRA", "취약점발견");
-            rpm.packages().forEach(p -> packages.add(p.name(), p.epoch(), p.version(), p.release(), p.architecture(), p.nevra(), "점검 불가 (RPM 대조 미지원)"));
+                    + " 근거: rpm -qa --qf (NAME, EPOCH, VERSION, RELEASE, ARCH). Epoch 미지정=0. 20초·20,000건·4 MiB 제한. 호스트 파일시스템 범위이며 RPM CVE 대조 미지원.",
+                    "이름", "Epoch", "버전", "Release", "아키텍처", "NEVRA");
+            rpm.packages().forEach(p -> packages.add(p.name(), p.epoch(), p.version(), p.release(), p.architecture(), p.nevra()));
 
             Table categories = table(workbook, styles, tables, "직군별 현황", "명세 열의 링크를 누르면 해당 직군의 상세 시트로 이동합니다.",
                     "직군", "코드", "프로세스 수", "JVM 수", "라이브러리 항목 수", "컨테이너 수", "프로세스 명세", "오픈소스 명세", "컨테이너 명세");
@@ -111,7 +123,7 @@ public class ExcelReports {
             Table issues = table(workbook, styles, tables, "수집 오류", report.issues().isEmpty()
                     ? "보고된 수집 오류 없음. 요약에 기재된 미지원 범위는 계속 적용됩니다."
                     : "일부 수집 실패·권한 부족·누락·제한을 확인하세요.", "계층", "대상", "내용");
-            report.issues().forEach(issue -> issues.add(issue.layer(), issue.target(), issue.message()));
+            operator.issues().forEach(issue -> issues.add(issue.layer(), String.join(", ", issue.targets()), issue.message()));
 
             Map<ServiceCategory, Table> processSheets = new EnumMap<>(ServiceCategory.class);
             Map<ServiceCategory, Table> librarySheets = new EnumMap<>(ServiceCategory.class);
@@ -120,27 +132,26 @@ public class ExcelReports {
                 Table processes = table(workbook, styles, tables, category.label() + "_프로세스", "CPU는 시작 후 누적 시간이며 시간은 UTC입니다. " + LONG_VALUE_NOTE,
                         "PID", "PPID", "프로세스명", "실행 파일", "소유자", "시작 시각(UTC)", "누적 CPU(ms)", "RSS(bytes)", "스레드 수", "컨테이너 ID", "분류 근거", "취약점발견");
                 Table libraries = table(workbook, styles, tables, category.label() + "_오픈소스", "Java 라이브러리 후보입니다. 실제 로딩·라이선스·오픈소스 여부는 별도 확인이 필요합니다.",
-                        "PID", "이름", "버전", "경로", "버전 근거", "라이선스", "로딩 상태", "취약점발견");
+                        "이름", "버전", "취약점발견", "관련 ID", "식별 근거", "PID·컨테이너·경로");
                 Table containers = table(workbook, styles, tables, category.label() + "_컨테이너", "태그와 실제 이미지 ID를 구분합니다. 연결 상세에서 전체 목록을 확인하세요.",
                         "컨테이너 ID", "이름", "이미지", "이미지 ID", "상태", "호스트 init PID", "프로세스 수", "포트 수", "네트워크 수", "마운트 수", "분류 근거", "연결 상세", "취약점발견");
                 processSheets.put(category, processes);
                 librarySheets.put(category, libraries);
                 containerSheets.put(category, containers);
                 long javaCount = report.javaProcesses().stream().filter(java -> categoryOf(byPid, java.pid()) == category).count();
-                long libraryCount = report.javaProcesses().stream().filter(java -> categoryOf(byPid, java.pid()) == category)
-                        .mapToLong(java -> java.libraries().size()).sum();
+                long libraryCount = operator.libraries().stream().filter(l -> l.category() == category).count();
                 Row row = categories.add(category.label(), category.name(),
                         report.processes().stream().filter(process -> process.category() == category).count(), javaCount, libraryCount,
                         report.containers().stream().filter(container -> container.category() == category).count(), "열기", "열기", "열기");
-                categories.link(row.getCell(6), processes.name(), 0);
-                categories.link(row.getCell(7), libraries.name(), 0);
-                categories.link(row.getCell(8), containers.name(), 0);
+                if (row.getCell(2).getNumericCellValue() > 0) { categories.link(row.getCell(6), processes.name(), 0); } else { row.getCell(6).setCellValue("—"); }
+                if (libraryCount > 0) { categories.link(row.getCell(7), libraries.name(), 0); } else { row.getCell(7).setCellValue("—"); }
+                if (row.getCell(5).getNumericCellValue() > 0) { categories.link(row.getCell(8), containers.name(), 0); } else { row.getCell(8).setCellValue("—"); }
             }
 
             for (var process : report.processes()) {
                 processSheets.get(process.category()).add(process.pid(), process.parentPid(), process.name(), process.executable(),
                         process.user(), process.startedAt(), process.cpuMillis(), process.residentBytes(), process.threads(),
-                        process.containerId(), process.classificationEvidence(), report.assessment() == null ? "미실시" : report.assessment().processStatus(process.pid()));
+                        process.containerId(), process.classificationEvidence(), report.assessment() == null ? "미실시" : statuses.getOrDefault("process:" + process.pid(), "미판정"));
             }
             for (var java : report.javaProcesses()) {
                 ServiceCategory category = categoryOf(byPid, java.pid());
@@ -151,10 +162,9 @@ public class ExcelReports {
                     java.properties().entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry ->
                             jvms.add(category.label(), java.pid(), container, java.status(), entry.getKey(), entry.getValue()));
                 }
-                java.libraries().forEach(library -> librarySheets.get(category).add(java.pid(), library.name(), library.version(),
-                        library.path(), library.evidence(), library.license(), library.loadingStatus(),
-                        report.assessment() == null ? "미실시" : report.assessment().status(Assessment.libraryAsset(java.pid(), library))));
             }
+            operator.libraries().forEach(l -> librarySheets.get(l.category()).add(l.name(), l.version(), l.status(), String.join(", ", l.advisories()),
+                    String.join("; ", l.evidence()), String.join("; ", l.locations().stream().map(OperatorReport.Location::label).toList())));
             for (var container : report.containers()) {
                 int firstDetailRow = connections.nextRow;
                 connectionRows(connections, container, "PID", container.processIds());
@@ -165,7 +175,7 @@ public class ExcelReports {
                 Row row = table.add(container.id(), container.name(), container.image(), container.imageId(), container.state(),
                         container.initPid(), container.processIds().size(), container.ports().size(), container.networks().size(),
                         container.mounts().size(), container.classificationEvidence(), firstDetailRow == connections.nextRow ? "수집된 연결 없음" : "열기",
-                        report.assessment() == null ? "미실시" : report.assessment().status("container:" + container.id()));
+                        report.assessment() == null ? "미실시" : statuses.getOrDefault("container:" + container.id(), "미판정"));
                 if (firstDetailRow != connections.nextRow) { table.link(row.getCell(11), connections.name(), firstDetailRow); }
             }
 
@@ -188,7 +198,14 @@ public class ExcelReports {
                 Row row = summary.add(name, "시트 열기");
                 summary.link(row.getCell(1), name, 0);
             }
-            summary.add("원문 복원", SOURCE_NOTE);
+            summary.add("원문 복원", SOURCE_NOTE + " 원문 시트는 숨김 상태입니다. Excel 시트 탭 우클릭 → 숨기기 취소로 열 수 있습니다.");
+            workbook.setSheetHidden(workbook.getSheetIndex(markdown.name()), true);
+            workbook.setSheetHidden(workbook.getSheetIndex(json.name()), true);
+            for (var category : ServiceCategory.values()) {
+                for (var detail : List.of(processSheets.get(category), librarySheets.get(category), containerSheets.get(category))) {
+                    if (detail.nextRow == 3) { workbook.setSheetHidden(workbook.getSheetIndex(detail.name()), true); }
+                }
+            }
             tables.forEach(Table::finish);
             workbook.setActiveSheet(0);
             workbook.write(output);
