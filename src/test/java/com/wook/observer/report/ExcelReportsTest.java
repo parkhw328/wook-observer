@@ -26,11 +26,34 @@ class ExcelReportsTest {
     private final ReportWriter reports = new ReportWriter(new MarkdownReports(), excel);
 
     @Test
+    void exportsOsAndRpmEvidenceAndUnsupportedVulnerabilityStatusWithoutFormulaExecution() throws Exception {
+        var base = ReportFixtures.sample();
+        var parser = new com.wook.observer.collector.SystemInventoryParser();
+        parser.accept("OSINFO\tkernel_release\tCOLLECTED\tNS4xNA==");
+        parser.accept("RPM\t=hostile()\t2\t1.2\t3.el9\tx86_64");
+        parser.accept("RPM_STATUS\tCOLLECTED");
+        var report = new Observation(base.version(), base.collectedAt(), base.host(), base.processes(), base.javaProcesses(),
+                base.containers(), base.issues(), base.facts(), null, parser.build(new java.util.ArrayList<>()));
+        var docs = reports.documents(report);
+        assertThat(docs.get("host/os.md")).contains("uname -r", "5.14");
+        assertThat(docs.get("host/rpm-packages.md")).contains("1.2", "3.el9", "x86&#95;64", "RPM 대조 미지원");
+        try (var workbook = workbook(report, docs)) {
+            assertThat(summaryValue(workbook, "RPM 수집 항목 수")).isEqualTo(1);
+            var row = workbook.getSheet("RPM 패키지").getRow(3);
+            assertThat(row.getCell(0).getCellType()).isEqualTo(CellType.STRING);
+            assertThat(row.getCell(0).getStringCellValue()).isEqualTo("=hostile()");
+            assertThat(row.getCell(5).getStringCellValue()).isEqualTo("=hostile()-2:1.2-3.el9.x86_64");
+            assertThat(row.getCell(6).getStringCellValue()).contains("점검 불가");
+            assertThat(restoredSources(workbook)).isEqualTo(docs);
+        }
+    }
+
+    @Test
     void includesAllSpecificationsAndExactOriginalDocumentsInOneWorkbook() throws Exception {
         var report = ReportFixtures.sample();
         var originals = reports.documents(report);
         try (var workbook = workbook(report, originals)) {
-            assertThat(workbook.getNumberOfSheets()).isEqualTo(30);
+            assertThat(workbook.getNumberOfSheets()).isEqualTo(32);
             assertThat(workbook.getStylesSource().getCTStylesheet().getCellStyles().getCellStyleArray(0).getName()).isEqualTo("Normal");
             assertThat(restoredSources(workbook)).isEqualTo(originals);
             for (ServiceCategory category : ServiceCategory.values()) {

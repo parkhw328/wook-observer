@@ -2,7 +2,7 @@
 
 서버의 **실행 프로세스 → JVM·라이브러리 → Docker 컨테이너**를 조사하고 서비스 직군별 명세와 취약점 대조 결과를 제공하는 내부망 웹서비스입니다.
 
-현재 버전은 **1.1.0**입니다. 중앙 서비스는 Spring Boot 4.1.2 / Java 21.0.13 이상 / PostgreSQL 18로 구성하고 Docker Compose로 실행합니다. 대상 Linux 서버는 SSH로 연결하므로 **Java를 새로 설치할 필요가 없습니다.**
+현재 버전은 **1.2.0**입니다. 중앙 서비스는 Spring Boot 4.1.2 / Java 21.0.13 이상 / PostgreSQL 18로 구성하고 Docker Compose로 실행합니다. 대상 Linux 서버는 SSH로 연결하므로 **Java를 새로 설치할 필요가 없습니다.**
 
 ## Docker로 시작하기
 
@@ -38,6 +38,8 @@ docker compose ps
 | 수집 영역 | 대상 서버 조건 / 한계 |
 | --- | --- |
 | OS·프로세스 | Linux, SSH, POSIX 셸, `ps` 및 기본 명령. Java 불필요. 접근 가능한 PID 범위만 조사 |
+| OS·커널 상세 | `uname -a/-r/-v/-m`, `/etc/os-release`, `/etc/redhat-release`, `/proc/version`. `base64`로 전송하며 항목당 16 KiB 제한 |
+| 설치 RPM | `rpm`, `timeout`, RPM DB 읽기 권한. 이름·Epoch·버전·Release·아키텍처, 20초·20,000건·4 MiB 제한 |
 | Docker | Docker CLI, `timeout`, 로컬 소켓 조회 권한. 컨테이너 정보와 `docker top` PID 연결 |
 | JVM 속성 | 실행 중인 Java 서비스, 사용할 수 있는 `jcmd`, `timeout`, attach 권한 |
 | Java 라이브러리 | Python 3와 `/proc`·JAR 읽기 권한. 실행 JAR, 클래스패스, 열린 JAR, Spring Boot/WAR 중첩 JAR의 메타데이터 |
@@ -68,10 +70,11 @@ Python 3나 `jcmd`가 없어도 기본 점검은 수행하고 상세 미수집 �
 
 동일 스냅샷을 DB에 저장하며 다시 다운로드해도 서버를 재점검하지 않습니다.
 
-- `summary.md`, `report.json`, `report.xlsx`와 `services/<직군>/{processes,open-source,containers}.md`.
+- `summary.md`, `report.json`, `report.xlsx`, `host/{os,rpm-packages}.md`와 `services/<직군>/{processes,open-source,containers}.md`.
 - 직군: 애플리케이션·웹·데이터베이스·캐시·메시징·인프라·기타. 분류는 이름 기반 휴리스틱과 설정 보정입니다.
-- 웹 점검 XLSX는 **31개 시트**: 기존 명세·원문 30개와 취약점 상세. 각 직군 명세에 `취약점발견` 컬럼, 요약에 카탈로그 버전·반영 시각·판정 범위를 포함합니다.
-- ZIP은 XLSX와 MD·JSON을 포함한 **24개 파일**입니다. 긴 원문은 분할해 원문 시트에 보존합니다. 수집 문자열은 수식으로 실행하지 않습니다.
+- 웹 점검 XLSX는 **33개 시트**: OS·커널과 RPM 패키지, 직군별 명세·원문·취약점 상세. 각 명세에 `취약점발견` 컬럼, 요약에 카탈로그 버전·반영 시각·판정 범위를 포함합니다.
+- ZIP은 XLSX와 MD·JSON을 포함한 **26개 파일**입니다. 긴 원문은 분할해 원문 시트에 보존합니다. 수집 문자열은 수식으로 실행하지 않습니다.
+- RPM 목록은 호스트 파일시스템 기준의 설치 내역입니다. 컨테이너별 RPM DB·서비스 사용 여부·RPM CVE 자동 대조는 미지원이며 `점검 불가`로 표시합니다. RPM 없음·실패·시간 제한·부분 수집을 구분합니다. 이전 저장 보고서는 `미수집`이며 다시 점검해야 새 항목이 채워집니다.
 
 ## 개발 및 기존 일회성 JAR
 
@@ -80,10 +83,10 @@ Python 3나 `jcmd`가 없어도 기본 점검은 수행하고 상세 미수집 �
 ```bash
 ./mvnw verify
 # DB 없이 로컬 서버를 한 번 점검하고 종료
-java -jar target/wook-observer-1.1.0.jar --observer.report-dir=./reports/check-001
+java -jar target/wook-observer-1.2.0.jar --observer.report-dir=./reports/check-001
 ```
 
-일회성 CLI는 기존 로컬 수집기를 유지하며 취약점 DB 대조를 수행하지 않습니다(`미실시`). CLI XLSX는 기존 30개 시트입니다. 출력 디렉터리는 새 경로여야 합니다.
+일회성 CLI는 기존 로컬 수집기를 유지하며 취약점 DB 대조를 수행하지 않습니다(`미실시`). CLI XLSX는 32개 시트입니다. 출력 디렉터리는 새 경로여야 합니다.
 
 기존 로컬 HTTP API가 꼭 필요한 경우 `--spring.profiles.active=collector`로 실행합니다. 이 모드는 인증 없이 **loopback 전용**으로 운영하며 `POST /api/v1/observations`, `/api/v1/reports`, `/api/v1/reports.xlsx`를 제공합니다. 중앙 웹서비스에서는 이 API를 제공하지 않습니다.
 
@@ -95,9 +98,9 @@ java -jar target/wook-observer-1.1.0.jar --observer.report-dir=./reports/check-0
 
 ```bash
 # 반입 서버: 함께 제공한 두 파일의 이름을 사용
-sha256sum -c wook-observer-1.1.0-linux-amd64-YYYYMMDD.tar.gz.sha256
-tar -xzf wook-observer-1.1.0-linux-amd64-YYYYMMDD.tar.gz
-cd wook-observer-1.1.0-linux-amd64-YYYYMMDD
+sha256sum -c wook-observer-1.2.0-linux-amd64-YYYYMMDD.tar.gz.sha256
+tar -xzf wook-observer-1.2.0-linux-amd64-YYYYMMDD.tar.gz
+cd wook-observer-1.2.0-linux-amd64-YYYYMMDD
 ./install.sh
 # 새 .env에서 관리자 비밀번호와 접속 주소·포트 확인
 ./start.sh
@@ -105,13 +108,13 @@ cd wook-observer-1.1.0-linux-amd64-YYYYMMDD
 
 `install.sh`는 파일 무결성 확인, `docker load`, 새 자격 증명 생성을 수행합니다. 오프라인 Compose에는 빌드 항목이 없으며 `pull_policy: never`와 `--pull never`로 실행합니다. 로그인 후 **데이터 업데이트**에서 원본 `maven-osv.zip`을 저장하고 즉시 갱신하세요. 기존 PC의 DB·계정·SSH 키·보고서는 반입 묶음에 넣지 않습니다.
 
-새 묶음을 만드는 **준비 PC에서만** Python 3와 Docker가 필요합니다. `v1.1.0`과 일치하는 `wook-observer:1.1.0`, `postgres:18.6-bookworm`의 amd64 이미지 및 `updates/maven-osv.zip`·manifest를 먼저 준비한 뒤 아래를 실행하세요. 이미지 내보내기에 `docker image save --platform`을 지원하는 Docker가 필요합니다.
+새 묶음을 만드는 **준비 PC에서만** Python 3와 Docker가 필요합니다. `v1.2.0`과 일치하는 `wook-observer:1.2.0`, `postgres:18.6-bookworm`의 amd64 이미지 및 `updates/maven-osv.zip`·manifest를 먼저 준비한 뒤 아래를 실행하세요. 이미지 내보내기에 `docker image save --platform`을 지원하는 Docker가 필요합니다.
 
 ```bash
-python3 scripts/package-offline.py --output resources/offline/wook-observer-1.1.0-linux-amd64-YYYYMMDD
+python3 scripts/package-offline.py --output resources/offline/wook-observer-1.2.0-linux-amd64-YYYYMMDD
 # 생성 디렉터리의 별도 복사본에서 설치·기동·데이터 반영 검증
 # 원본 디렉터리의 VERIFICATION.md에 결과 기록 (.env 생성 금지)
-python3 scripts/package-offline.py --output resources/offline/wook-observer-1.1.0-linux-amd64-YYYYMMDD --archive-only
+python3 scripts/package-offline.py --output resources/offline/wook-observer-1.2.0-linux-amd64-YYYYMMDD --archive-only
 ```
 
 최종 `.tar.gz`와 `.tar.gz.sha256`은 `resources/offline/`에 생성되며 Git에 추가하지 않습니다. 동일 버전의 앱 이미지를 다시 포장할 때는 앱 태그를 유지하고 `PACKAGE-MANIFEST.json`에 묶음 개정·생성 시각·이미지/데이터 해시를 기록합니다. 소스 스냅샷만으로 폐쇄망에서 재빌드하려면 별도의 Maven 의존성 반입이 필요합니다.
@@ -119,6 +122,8 @@ python3 scripts/package-offline.py --output resources/offline/wook-observer-1.1.
 `docker compose exec -T db pg_dump -U observer -d observer -Fc > observer.dump`로 DB를 백업하고 `.env`의 암호화 키를 별도로 보관하세요. 복구는 중지된 앱과 비어 있는 대상 DB에 `pg_restore`로 진행하고 기동 전 계정·암호화 키를 함께 확인하세요. `docker compose down`은 볼륨을 보존하지만 `down -v`는 DB를 삭제합니다.
 
 ## 현재 범위와 프로젝트 지침
+
+중앙 서비스의 언어는 자원 사용량과 운영 조건에 따라 변경할 수 있습니다. 현재는 기존 Spring Boot 구현을 유지하며, 측정 결과와 Python 등으로 전환할 기준은 [런타임 선택 기록](docs/runtime-decision.md)에 정리했습니다.
 
 Windows, Kubernetes/containerd, 비 Java OS 패키지 CVE, 이미지 레이어 전체 스캔, 실제 동적 클래스 로딩, systemd/리스닝 포트/호출 관계는 후속 범위입니다. 원격 JVM의 세부 수집은 권한·네임스페이스·도구에 의존합니다. 오류 0건이 전체 계층의 완전한 분석을 의미하지 않습니다.
 

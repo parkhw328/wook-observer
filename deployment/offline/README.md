@@ -1,4 +1,4 @@
-# Wook Observer 1.1.0 폐쇄망 설치 안내
+# Wook Observer 1.2.0 폐쇄망 설치 안내
 
 이 묶음은 **Linux x86_64(amd64)** 서버의 신규 설치용입니다. Docker Engine과 `docker compose`가 설치된 서버에서 앱·PostgreSQL·취약점 데이터를 인터넷 없이 사용할 수 있습니다.
 
@@ -50,13 +50,13 @@ cd @@BUNDLE_NAME@@
 
 기본 Compose 프로젝트명은 `wook-observer-offline`입니다. 이 프로젝트의 DB는 Docker named volume에 저장됩니다. 이미 실행한 프로젝트명을 변경하면 다른 볼륨을 사용할 수 있으므로 같은 설치에서는 유지하세요.
 
-### 기존 1.0.0에서 업데이트
+### 기존 1.0.0 / 1.1.0에서 업데이트
 
 1. 기존 설치 디렉터리에서 DB와 `.env`를 아래 백업 절차로 보관합니다. 진행 중인 점검이 끝난 뒤 업데이트하세요.
 2. 새 묶음을 별도 디렉터리에 풀고 **기존 `.env`를 새 디렉터리에 복사**합니다. 기존 포트·DB 비밀번호·암호화 키를 그대로 사용해야 합니다.
 3. 기존 Compose 프로젝트명이 `wook-observer-offline`과 다르면 `export COMPOSE_PROJECT_NAME=기존프로젝트명`으로 맞춥니다. 기존 폴더에서 `docker compose ls`로 확인할 수 있습니다.
-4. 새 디렉터리의 `./install.sh`, `./start.sh`를 실행합니다. 기존 `.env`는 덮어쓰지 않고 같은 프로젝트의 DB 볼륨을 사용합니다. 앱 기동 시 V3 DB 마이그레이션을 적용하며 기존 대상은 SSH 키·접속 계정 권한으로 유지됩니다.
-5. 기존 관리자 비밀번호로 로그인해 대상·이력·카탈로그와 추가된 인증 옵션을 확인합니다. 기존 사용자 비밀번호는 초기화되지 않습니다.
+4. 새 디렉터리의 `./install.sh`, `./start.sh`를 실행합니다. 기존 `.env`는 덮어쓰지 않고 같은 프로젝트의 DB 볼륨을 사용합니다. 1.0.0에서 오면 V3 DB 마이그레이션으로 기존 대상을 SSH 키·접속 계정 권한으로 보존하며, 1.1.0에서 오면 스키마 변경 없이 유지합니다.
+5. 기존 관리자 비밀번호로 로그인해 대상·이력·카탈로그를 확인하고 새 점검으로 OS·RPM 정보를 수집합니다. 기존 사용자 비밀번호는 초기화되지 않습니다.
 
 DB 볼륨을 삭제하거나 암호화 키를 새로 생성하지 마세요. 이전 앱으로 되돌려야 할 경우 단순 이미지 교체 대신 업데이트 전 DB 백업과 같은 `.env`를 함께 복구합니다.
 
@@ -82,7 +82,7 @@ DB 볼륨을 삭제하거나 암호화 키를 새로 생성하지 마세요. 이
 
 root 전환 실패는 점검 실패로 기록하고 일반 권한으로 대체하지 않습니다. 상세 조건은 [docs/ssh-access.md](docs/ssh-access.md)를 확인하세요. 한글·영문 폰트도 이미지에 포함되어 외부 연결이 필요 없습니다.
 
-점검 이력에서 XLSX·ZIP·JSON·요약 MD를 다운로드합니다. 상세 기능과 수집 한계는 [docs/application-readme.md](docs/application-readme.md)에 있습니다.
+점검 이력에서 OS·커널 정보와 RPM 설치 목록을 확인하고 XLSX·ZIP·JSON·요약 MD를 다운로드합니다. RPM 조회는 20초·20,000건·4 MiB로 제한하며 도구 없음·권한/DB 오류·일부 수집을 구분합니다. 이전 보고서는 새 정보를 채우기 위해 다시 점검해야 합니다. RPM CVE 대조와 컨테이너별 RPM DB는 미지원입니다. 상세 기능과 수집 한계는 [docs/application-readme.md](docs/application-readme.md)에 있습니다.
 
 ## 6. 운영과 백업
 
@@ -110,13 +110,13 @@ cp .env "backups/environment-$backup_stamp.env"
 
 | 경로 | 내용 |
 | --- | --- |
-| `images/wook-observer-1.1.0.tar.gz` | 실행 JAR·Java·SSH 클라이언트·보고서 라이브러리가 포함된 앱 이미지 전체 레이어 |
+| `images/wook-observer-1.2.0.tar.gz` | 실행 JAR·Java·SSH 클라이언트·보고서 라이브러리가 포함된 앱 이미지 전체 레이어 |
 | `images/postgres-18.6-bookworm.tar.gz` | PostgreSQL 이미지 전체 레이어 |
 | `images/images.list` | 이미지 태그, 실행 설정·파일시스템 레이어의 SHA-256, 파일명 |
 | `compose.yaml` | 빌드 항목 없이 `pull_policy: never`를 지정한 오프라인 실행 구성 |
 | `install.sh`, `start.sh`, `stop.sh`, `status.sh`, `logs.sh`, `verify.sh` | 설치·운영·파일 확인 도구 |
 | `updates/` | Maven ZIP·출처 기록·시작용 CVE/CCE/정책 JSON |
-| `source/` | `v1.1.0` 애플리케이션 Git 소스 스냅샷. 소스 재빌드에는 별도의 Maven 의존성 반입 필요 |
+| `source/` | `v1.2.0` 애플리케이션 Git 소스 스냅샷. 소스 재빌드에는 별도의 Maven 의존성 반입 필요 |
 | `PACKAGE-MANIFEST.json` | 앱 버전·원본 커밋·플랫폼·내보내기 전 이미지 ID·실행 내용 해시·데이터 출처 |
 | `SHA256SUMS` | 변경하지 않은 반입 파일 전체의 SHA-256 |
 | `VERIFICATION.md` | 묶음으로 수행한 오프라인 기동·데이터 반영 검증 결과 |

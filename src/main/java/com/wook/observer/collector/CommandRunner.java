@@ -5,6 +5,7 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -19,6 +20,10 @@ public class CommandRunner {
     }
 
     public Result run(List<String> command) {
+        return run(command, "", properties.getCommandTimeout(), MAX_OUTPUT);
+    }
+
+    Result run(List<String> command, String input, Duration timeout, int maxOutput) {
         Process process = null;
         try {
             process = new ProcessBuilder(command).redirectErrorStream(true).start();
@@ -26,16 +31,19 @@ public class CommandRunner {
             CompletableFuture<byte[]> output = new CompletableFuture<>();
             Thread.ofVirtual().start(() -> {
                 try (var stream = running.getInputStream()) {
-                    output.complete(stream.readNBytes(MAX_OUTPUT + 1));
+                    output.complete(stream.readNBytes(maxOutput + 1));
                 } catch (IOException exception) {
                     output.completeExceptionally(exception);
                 }
             });
-            if (!process.waitFor(properties.getCommandTimeout().toMillis(), TimeUnit.MILLISECONDS)) {
+            try (var stdin = process.getOutputStream()) {
+                stdin.write(input.getBytes(StandardCharsets.UTF_8));
+            }
+            if (!process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS)) {
                 return new Result(false, "", "조회 명령 시간 제한 초과");
             }
             byte[] bytes = output.get(1, TimeUnit.SECONDS);
-            if (bytes.length > MAX_OUTPUT) {
+            if (bytes.length > maxOutput) {
                 return new Result(false, "", "조회 출력 크기 제한 초과");
             }
             if (process.exitValue() != 0) {

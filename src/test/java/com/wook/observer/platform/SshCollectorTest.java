@@ -9,6 +9,13 @@ import static org.assertj.core.api.Assertions.*;
 class SshCollectorTest {
     private final SshCollector collector = new SshCollector(null,new ServiceClassifier(new ObserverProperties()));
     @Test
+    void includesSystemInventoryInRemoteSnapshotWithPtyLineEndings() {
+        var result = collector.parse("HOST\trhel\t5.14\tx86_64\t2\t1048576\r\nPROCESS\t2 1 root 1024 1 nginx\r\n"
+                + "OSINFO\tkernel_release\tCOLLECTED\tNS4xNA==\r\nRPM\tbash\t0\t5.1\t1.el9\tx86_64\r\nRPM_STATUS\tCOLLECTED\r\nDONE\r\n");
+        assertThat(result.systemInventory().rpm().packages()).hasSize(1);
+        assertThat(result.systemInventory().os()).anyMatch(d -> d.value().equals("5.14"));
+    }
+    @Test
     void supportsNoJavaHostAndPreservesNamespaceBoundary() {
         var result=collector.parse("""
                 HOST\tno-java\t6.1\tx86_64\t2\t1048576

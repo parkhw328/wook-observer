@@ -6,14 +6,23 @@ import java.util.Map;
 
 public record Observation(String version, Instant collectedAt, Host host, List<ProcessInfo> processes,
                           List<JavaInfo> javaProcesses, List<ContainerInfo> containers, List<Issue> issues,
-                          Map<String, String> facts, Assessment assessment) {
+                          Map<String, String> facts, Assessment assessment, SystemInventory systemInventory) {
+    public Observation {
+        systemInventory = systemInventory == null ? SystemInventory.notCollected() : systemInventory;
+    }
+    // Preserve readers and callers of snapshots written before 1.2.0.
+    public Observation(String version, Instant collectedAt, Host host, List<ProcessInfo> processes,
+                       List<JavaInfo> javaProcesses, List<ContainerInfo> containers, List<Issue> issues,
+                       Map<String, String> facts, Assessment assessment) {
+        this(version, collectedAt, host, processes, javaProcesses, containers, issues, facts, assessment, null);
+    }
     public Observation(String version, Instant collectedAt, Host host, List<ProcessInfo> processes,
                        List<JavaInfo> javaProcesses, List<ContainerInfo> containers, List<Issue> issues) {
         this(version, collectedAt, host, processes, javaProcesses, containers, issues, Map.of(), null);
     }
 
     public Observation assessed(Assessment result) {
-        return new Observation(version, collectedAt, host, processes, javaProcesses, containers, issues, facts, result);
+        return new Observation(version, collectedAt, host, processes, javaProcesses, containers, issues, facts, result, systemInventory);
     }
     public record Host(String name, String os, String osVersion, String architecture, int processors,
                        long physicalMemoryBytes, String scope, String dockerVersion) { }

@@ -15,6 +15,8 @@ public class MarkdownReports {
     public Map<String, String> documents(Observation report) {
         Map<String, String> documents = new LinkedHashMap<>();
         documents.put("summary.md", summary(report));
+        documents.put("host/os.md", operatingSystem(report));
+        documents.put("host/rpm-packages.md", rpmPackages(report));
         for (ServiceCategory category : ServiceCategory.values()) {
             String base = "services/" + category.directory() + "/";
             documents.put(base + "processes.md", processes(report, category));
@@ -36,6 +38,9 @@ public class MarkdownReports {
                 .append("- Docker 엔진: ").append(cell(report.host().dockerVersion())).append("\n")
                 .append("- 프로세스: ").append(report.processes().size()).append(" / Java: ").append(report.javaProcesses().size())
                 .append(" / 컨테이너: ").append(report.containers().size()).append("\n\n")
+                .append("## 호스트 명세\n\n[OS·커널 정보](host/os.md) · [설치 RPM 패키지](host/rpm-packages.md)\n\n")
+                .append("RPM: ").append(report.systemInventory().rpm().status().label()).append(" / 수집 항목 ")
+                .append(report.systemInventory().rpm().packages().size()).append("건\n\n")
                 .append("## 서비스 직군별 명세\n\n| 직군 | 프로세스 | 오픈소스/라이브러리 | 컨테이너 |\n| --- | --- | --- | --- |\n");
         for (ServiceCategory category : ServiceCategory.values()) {
             String base = "services/" + category.directory() + "/";
@@ -45,7 +50,7 @@ public class MarkdownReports {
         out.append("\n## 해석 범위\n\n")
                 .append("- 실행 파일·이미지 이름에 의한 서비스 분류는 휴리스틱이며 설정으로 보정할 수 있습니다.\n")
                 .append("- 라이브러리는 클래스패스 또는 실행 패키지에서 발견한 항목입니다. 실제 클래스 로딩, 오픈소스 여부, 라이선스는 별도 확인이 필요합니다.\n")
-                .append("- 비 Java 패키지 상세, 동적 클래스 로더, systemd, 호스트 리스닝 포트, Kubernetes 계층은 미지원입니다. SSH와 로컬 수집의 차이는 수집 오류를 확인하세요.\n")
+                .append("- RPM 외 패키지 상세, 동적 클래스 로더, systemd, 호스트 리스닝 포트, Kubernetes 계층은 미지원입니다. SSH와 로컬 수집의 차이는 수집 오류를 확인하세요.\n")
                 .append("- 시작 시각 이후 순차적으로 수집한 스냅샷으로 프로세스 종료 등 시점 차이가 있을 수 있습니다.\n\n")
                 .append("## 수집 제한 및 오류\n\n");
         if (report.issues().isEmpty()) {
@@ -88,7 +93,7 @@ public class MarkdownReports {
 
     private String libraries(Observation report, ServiceCategory category) {
         StringBuilder out = heading(category, "오픈소스 명세", report);
-        out.append("Java 라이브러리 후보 목록입니다. 오픈소스 여부·라이선스와 실제 로딩 여부는 확정하지 않습니다. 비 Java 패키지 상세 수집은 후속 범위입니다.\n\n")
+        out.append("Java 라이브러리 후보 목록입니다. 오픈소스 여부·라이선스와 실제 로딩 여부는 확정하지 않습니다. 호스트 RPM은 별도 [설치 패키지 명세](../../host/rpm-packages.md)를 확인하세요.\n\n")
                 .append("| PID | 이름 | 버전 | 경로 | 버전 근거 | 라이선스 | 로딩 상태 | 취약점발견 |\n")
                 .append("| --- | --- | --- | --- | --- | --- | --- | --- |\n");
         Set<Long> pids = report.processes().stream().filter(process -> process.category() == category)
@@ -100,6 +105,28 @@ public class MarkdownReports {
         if (javaProcesses.stream().allMatch(java -> java.libraries().isEmpty())) {
             out.append("\n수집된 라이브러리 없음. 라이브러리가 없다는 의미가 아니며 미지원·권한·수집 오류를 확인하세요.\n");
         }
+        return out.toString();
+    }
+
+    private String operatingSystem(Observation report) {
+        var out = new StringBuilder("# OS·커널 명세\n\n");
+        out.append("수집 시작 시각: ").append(report.collectedAt()).append("\n\n관측 범위: ").append(cell(report.host().scope()))
+                .append("\n\n배포판 정보와 실행 커널은 구분합니다. 컨테이너에서는 배포판 파일이 컨테이너 기준이며 커널은 호스트와 공유될 수 있습니다. 파일 끝 개행은 생략하고 항목당 16 KiB까지 보존합니다.\n\n")
+                .append("| 항목 | 근거 | 상태 | 값 |\n| --- | --- | --- | --- |\n");
+        report.systemInventory().os().forEach(d -> row(out, d.key(), d.source(), d.status().label(), d.value()));
+        if (report.systemInventory().os().isEmpty()) { out.append("\nOS 상세 미수집. 이전 버전의 스냅샷은 다시 점검해야 합니다.\n"); }
+        return out.toString();
+    }
+
+    private String rpmPackages(Observation report) {
+        var rpm = report.systemInventory().rpm();
+        var out = new StringBuilder("# 설치 RPM 패키지 명세\n\n");
+        out.append("수집 시작 시각: ").append(report.collectedAt()).append("\n\n관측 범위: ").append(cell(report.host().scope()))
+                .append("\n\n근거: `rpm -qa --qf 'RPM\\t%{NAME}\\t%{EPOCH}\\t%{VERSION}\\t%{RELEASE}\\t%{ARCH}\\n'`\n\n")
+                .append("상태: ").append(rpm.status().label()).append(" / 수집 항목: ").append(rpm.packages().size()).append("건\n\n")
+                .append(cell(rpm.message())).append("\n\n20초·20,000건·4 MiB 제한. Epoch 미지정은 0입니다. 여러 아키텍처·설치 버전은 각각 보존합니다. 설치 여부는 서비스 사용·실제 로딩을 의미하지 않습니다. 컨테이너별 RPM DB와 RPM CVE 대조는 미지원입니다.\n\n")
+                .append("| 이름 | Epoch | 버전 | Release | 아키텍처 | NEVRA | 취약점발견 |\n| --- | --- | --- | --- | --- | --- | --- |\n");
+        rpm.packages().forEach(p -> row(out, p.name(), p.epoch(), p.version(), p.release(), p.architecture(), p.nevra(), "점검 불가 (RPM 대조 미지원)"));
         return out.toString();
     }
 

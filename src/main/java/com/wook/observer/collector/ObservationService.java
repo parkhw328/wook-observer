@@ -13,6 +13,7 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.locks.ReentrantLock;
 
 @Service
@@ -20,13 +21,15 @@ public class ObservationService {
     private final DockerCollector docker;
     private final ProcessCollector processes;
     private final JavaCollector java;
+    private final SystemInventoryCollector system;
     private final BuildProperties build;
     private final ReentrantLock scanLock = new ReentrantLock();
 
-    public ObservationService(DockerCollector docker, ProcessCollector processes, JavaCollector java, BuildProperties build) {
+    public ObservationService(DockerCollector docker, ProcessCollector processes, JavaCollector java, SystemInventoryCollector system, BuildProperties build) {
         this.docker = docker;
         this.processes = processes;
         this.java = java;
+        this.system = system;
         this.build = build;
     }
 
@@ -53,8 +56,9 @@ public class ObservationService {
                 processResult = List.of();
             }
             var javaResult = java.collect(processResult, issues);
+            var inventory = system.collect(issues);
             return new Observation(build.getVersion(), collectedAt, host(containerResult.engineVersion()),
-                    processResult, javaResult, containerResult.containers(), List.copyOf(issues));
+                    processResult, javaResult, containerResult.containers(), List.copyOf(issues), Map.of(), null, inventory);
         } finally {
             scanLock.unlock();
         }

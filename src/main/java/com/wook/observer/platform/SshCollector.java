@@ -1,6 +1,7 @@
 package com.wook.observer.platform;
 
 import com.wook.observer.collector.ServiceClassifier;
+import com.wook.observer.collector.SystemInventoryParser;
 import com.wook.observer.model.Observation;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
@@ -36,10 +37,11 @@ public class SshCollector {
                 && !"0".equals(report.facts().get("host:effective_uid"))) {
             throw new ApiProblem(502, "root 권한을 확인하지 못했습니다. 점검 결과를 저장하지 않았습니다.");
         }
-        return new Observation(report.version(), started, report.host(), report.processes(), report.javaProcesses(), report.containers(), report.issues(), report.facts(), null);
+        return new Observation(report.version(), started, report.host(), report.processes(), report.javaProcesses(), report.containers(), report.issues(), report.facts(), null, report.systemInventory());
     }
 
     public Observation parse(String output) {
+        var system = new SystemInventoryParser();
         List<Observation.Issue> issues = new ArrayList<>();
         List<Observation.ProcessInfo> processes = new ArrayList<>();
         List<Observation.ContainerInfo> containers = new ArrayList<>();
@@ -52,6 +54,7 @@ public class SshCollector {
         String dockerVersion = "미확인";
         boolean done = false, isolated = false;
         for (String line : output.lines().toList()) {
+            system.accept(line);
             String[] parts = line.split("\t", 3);
             try {
                 switch (parts[0]) {
@@ -132,10 +135,11 @@ public class SshCollector {
                 p.user(), p.startedAt(), p.cpuMillis(), p.residentBytes(), p.threads(), p.category(), p.classificationEvidence(), pidOwners.getOrDefault(p.pid(), ""))).toList();
         List<Observation.JavaInfo> java = properties.entrySet().stream().map(entry -> new Observation.JavaInfo(entry.getKey(),
                 entry.getValue().isEmpty() ? "JVM 속성 점검 불가" : "선별 JVM 속성 수집", entry.getValue(), libraries.getOrDefault(entry.getKey(), List.of()))).toList();
-        issues.add(new Observation.Issue("scope", "SSH target", "비 Java 패키지·동적 클래스 로더·Kubernetes·프로세스 시작/CPU 시간은 미지원. SSH 설정은 전역 값만 확인."));
+        issues.add(new Observation.Issue("scope", "SSH target", "RPM 외 패키지·동적 클래스 로더·Kubernetes·프로세스 시작/CPU 시간은 미지원. SSH 설정은 전역 값만 확인. OS/RPM은 수집 계정의 파일시스템 범위이며 컨테이너별 RPM DB는 별도 조회하지 않음."));
         String scope = isolated ? "SSH 컨테이너 네임스페이스" : "SSH Linux 호스트";
         scope += facts.containsKey("host:effective_uid") ? " / 실행 계정 " + facts.get("host:effective_user") + " (UID " + facts.get("host:effective_uid") + ")" : " (계정 접근 범위)";
-        return new Observation("1.1.0", Instant.now(), new Observation.Host(host[1], "Linux", host[2], host[3], Integer.parseInt(host[4]),
-                (long) Double.parseDouble(host[5]), scope, dockerVersion), linked, java, containers, issues, facts, null);
+        var inventory = system.build(issues);
+        return new Observation("1.2.0", Instant.now(), new Observation.Host(host[1], "Linux", host[2], host[3], Integer.parseInt(host[4]),
+                (long) Double.parseDouble(host[5]), scope, dockerVersion), linked, java, containers, issues, facts, null, inventory);
     }
 }

@@ -33,7 +33,7 @@ public class PlatformController {
     @GetMapping("/session")
     public Map<String, Object> session(Authentication auth, CsrfToken csrf) {
         String role = auth == null ? "" : auth.getAuthorities().stream().findFirst().map(Object::toString).orElse("").replace("ROLE_", "");
-        return Map.of("username", auth == null ? "" : auth.getName(), "role", role, "csrf", csrf.getToken(), "csrfHeader", csrf.getHeaderName(), "version", "1.1.0");
+        return Map.of("username", auth == null ? "" : auth.getName(), "role", role, "csrf", csrf.getToken(), "csrfHeader", csrf.getHeaderName(), "version", "1.2.0");
     }
     @GetMapping("/targets") public List<Map<String, Object>> targets() { return targets.list(); }
     @GetMapping("/admin/targets/{id}") public Map<String, Object> target(@PathVariable String id) {

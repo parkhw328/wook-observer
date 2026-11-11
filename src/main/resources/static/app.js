@@ -338,6 +338,22 @@ function userForm(button) {
     `<h2>${edit ? "계정 편집" : "사용자 추가"}</h2><form id="user-form" data-edit="${edit}"><label>아이디<input name="username" required minlength="3" maxlength="64" pattern="[A-Za-z0-9][A-Za-z0-9._-]{2,63}" value="${esc(button.dataset.user)}" ${edit ? "readonly" : ""} autocomplete="off"></label><label>${edit ? "새 비밀번호 (빈칸이면 유지)" : "초기 비밀번호"}<input name="password" type="password" ${edit ? "" : "required"} minlength="12" autocomplete="new-password"><small>12자 이상, UTF-8 72바이트 이하</small></label><label>권한<select name="role"><option value="USER" ${button.dataset.role === "USER" ? "selected" : ""}>사용자 · 점검 / 조회</option><option value="ADMIN" ${button.dataset.role === "ADMIN" ? "selected" : ""}>관리자 · 전체 관리</option></select></label><label class="check"><input name="enabled" type="checkbox" ${!edit || button.dataset.enabled === "true" ? "checked" : ""}>계정 활성화</label><button class="primary" type="submit">저장</button></form>`;
   $("#modal").showModal();
 }
+function systemDetails(report) {
+  const inventory = report.systemInventory;
+  const statuses = { COLLECTED: "수집 완료", UNAVAILABLE: "파일·도구 없음", FAILED: "조회 실패",
+    TIMEOUT: "시간 제한", TRUNCATED: "일부 수집·제한", NOT_COLLECTED: "미수집" };
+  const rpm = inventory?.rpm;
+  const packages = rpm?.packages || [];
+  return '<h3>OS·커널 정보</h3>' +
+    (inventory?.os?.length ? table(["근거", "수집 상태", "값"], inventory.os.map(d =>
+      `<tr><td>${esc(d.source)}</td><td class="system-status">${esc(statuses[d.status] || "미수집")}</td><td class="system-value">${esc(d.value || "—")}</td></tr>`))
+      : empty("OS 상세 미수집", "이전 버전의 결과는 다시 점검하면 OS·RPM 정보를 확인할 수 있습니다.")) +
+    '<h3>설치 RPM 패키지</h3>' +
+    `<p>${esc(statuses[rpm?.status] || "미수집")} · 수집 항목 ${number(packages.length)}건</p><p class="small">${esc(rpm?.message || "이 스냅샷에서는 RPM을 수집하지 않았습니다.")} 호스트 파일시스템 범위이며 컨테이너별 RPM DB와 RPM CVE 대조는 미지원입니다.</p>` +
+    (packages.length ? table(["이름", "Epoch", "버전", "Release", "아키텍처", "취약점발견"], packages.slice(0, 100).map(p =>
+      `<tr><td>${esc(p.name)}</td><td>${esc(p.epoch)}</td><td>${esc(p.version)}</td><td>${esc(p.release)}</td><td>${esc(p.architecture)}</td><td>점검 불가 (RPM 대조 미지원)</td></tr>`)) : "") +
+    (packages.length > 100 ? '<p class="small">첫 100건을 표시합니다. 전체 수집 목록은 XLSX·JSON·ZIP에서 확인하세요.</p>' : "");
+}
 async function detail(id) {
   const report = await api("/jobs/" + encodeURIComponent(id));
   const all = report.assessment?.findings || [];
@@ -361,7 +377,7 @@ async function detail(id) {
           "대조 가능한 항목이 없습니다",
           "라이브러리 식별 정보, 적용 규칙과 수집 제한을 확인하세요.",
         )) +
-    "<h3>수집 제한 및 오류</h3>" +
+    systemDetails(report) + "<h3>수집 제한 및 오류</h3>" +
     table(
       ["계층", "대상", "내용"],
       report.issues.map(

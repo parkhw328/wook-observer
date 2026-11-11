@@ -67,7 +67,8 @@ final class SshTransport {
             }
             String inventory;
             try (var resource = new ClassPathResource("collector/ssh-inventory.sh").getInputStream()) {
-                inventory = new String(resource.readAllBytes(), StandardCharsets.UTF_8);
+                inventory = new String(resource.readAllBytes(), StandardCharsets.UTF_8).replace("# SYSTEM_INVENTORY",
+                        com.wook.observer.collector.SystemInventoryCollector.script());
             }
             var handshake = new PrivilegeHandshake(mode, UUID.randomUUID().toString().replace("-", ""),
                     elevate ? targets.decrypt(target, "privilege_password") : "");

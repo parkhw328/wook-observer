@@ -24,7 +24,7 @@ class ObservationServiceTest {
         when(processes.collect(anyList(), anyList())).thenReturn(List.of());
         var java = mock(JavaCollector.class);
         when(java.collect(anyList(), anyList())).thenReturn(List.of());
-        var report = new ObservationService(docker, processes, java, build()).collect();
+        var report = new ObservationService(docker, processes, java, mock(SystemInventoryCollector.class), build()).collect();
         assertThat(report.issues()).anySatisfy(issue -> assertThat(issue.message()).contains("Docker 수집 실패").doesNotContain("private detail"));
         assertThat(report.processes()).isEmpty();
     }
@@ -43,7 +43,7 @@ class ObservationServiceTest {
         when(processes.collect(anyList(), anyList())).thenReturn(List.of());
         var java = mock(JavaCollector.class);
         when(java.collect(anyList(), anyList())).thenReturn(List.of());
-        var service = new ObservationService(docker, processes, java, build());
+        var service = new ObservationService(docker, processes, java, mock(SystemInventoryCollector.class), build());
         try (var executor = Executors.newSingleThreadExecutor()) {
             var first = executor.submit(service::collect);
             try {

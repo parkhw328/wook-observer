@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssh-client 
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10001 observer && useradd --uid 10001 --gid observer --create-home observer
 WORKDIR /app
-COPY --from=build --chown=observer:observer /workspace/target/wook-observer-1.1.0.jar /app/observer.jar
+COPY --from=build --chown=observer:observer /workspace/target/wook-observer-1.2.0.jar /app/observer.jar
 COPY --chmod=755 scripts/ssh-askpass.sh /app/scripts/ssh-askpass.sh
 USER observer
 ENV SERVER_ADDRESS=0.0.0.0 JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=70 -Djava.awt.headless=true"

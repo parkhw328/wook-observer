@@ -91,7 +91,7 @@ class PlatformIntegrationTest {
             assertThat(downloaded.headers().firstValue("Cache-Control")).contains("no-store");
             if (format.equals("xlsx")) {
                 try (var workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook(new java.io.ByteArrayInputStream(downloaded.body()))) {
-                    assertThat(workbook.getNumberOfSheets()).isEqualTo(31);
+                    assertThat(workbook.getNumberOfSheets()).isEqualTo(33);
                     assertThat(workbook.getSheet("취약점 상세")).isNotNull();
                     assertThat(workbook.getSheet("애플리케이션_오픈소스").getRow(2).getCell(7).getStringCellValue()).isEqualTo("취약점발견");
                 }

@@ -64,6 +64,8 @@ public class ExcelReports {
             summary.add("컨테이너 연결 프로세스 수", report.processes().stream().filter(process -> !process.containerId().isBlank()).count());
             summary.add("라이브러리 항목 수(프로세스별 중복 포함)", report.javaProcesses().stream().mapToLong(java -> java.libraries().size()).sum());
             summary.add("수집 오류 수", report.issues().size());
+            summary.add("RPM 수집 상태", report.systemInventory().rpm().status().label());
+            summary.add("RPM 수집 항목 수", report.systemInventory().rpm().packages().size());
             if (report.assessment() != null) {
                 summary.add("취약점 데이터 버전", report.assessment().catalogRevision());
                 summary.add("취약점 데이터 반영 시각", report.assessment().catalogUpdatedAt());
@@ -76,7 +78,7 @@ public class ExcelReports {
             }
             summary.add("원문 문서 수", documents.size());
             summary.add("해석 주의", "라이브러리 발견은 실제 로딩이나 오픈소스 여부·라이선스 확인을 의미하지 않습니다. Java 수에는 수집기 자체가 포함될 수 있습니다.");
-            summary.add("관측 한계", "비 Java 패키지 상세, 동적 클래스 로더, systemd, 호스트 리스닝 포트, Kubernetes 계층은 미지원입니다. SSH와 로컬 수집의 도구·권한 차이는 수집 오류를 확인하세요.");
+            summary.add("관측 한계", "RPM 외 패키지 상세, RPM CVE 대조, 컨테이너별 RPM DB, 동적 클래스 로더, systemd, 호스트 리스닝 포트, Kubernetes 계층은 미지원입니다. SSH와 로컬 수집의 도구·권한 차이는 수집 오류를 확인하세요.");
             summary.add("분류 기준", "실행 파일·이미지 이름 휴리스틱 및 사용자 설정. 기타 직군은 자동 분류 미확정 항목을 포함합니다.");
             summary.add("숫자와 긴 값", "컨테이너 ID·15자리 초과 정수는 텍스트로 보존합니다. " + LONG_VALUE_NOTE);
 
@@ -89,6 +91,16 @@ public class ExcelReports {
             host.add("물리 메모리(bytes, -1은 미확인)", report.host().physicalMemoryBytes());
             host.add("관측 범위", report.host().scope());
             host.add("Docker 엔진 버전", report.host().dockerVersion());
+
+            Table os = table(workbook, styles, tables, "OS·커널", "배포판과 실행 커널을 구분합니다. 컨테이너의 배포판 파일과 호스트 공유 커널이 함께 보일 수 있습니다. 항목당 16 KiB, 끝 개행 생략.",
+                    "항목", "근거", "수집 상태", "값");
+            report.systemInventory().os().forEach(d -> os.add(d.key(), d.source(), d.status().label(), d.value()));
+            if (report.systemInventory().os().isEmpty()) { os.add("OS 상세", "", "미수집", "이전 스냅샷은 재점검 필요"); }
+            var rpm = report.systemInventory().rpm();
+            Table packages = table(workbook, styles, tables, "RPM 패키지", rpm.status().label() + ": " + rpm.message()
+                    + " 근거: rpm -qa --qf (NAME, EPOCH, VERSION, RELEASE, ARCH). Epoch 미지정=0. 20초·20,000건·4 MiB 제한. 호스트 파일시스템 범위.",
+                    "이름", "Epoch", "버전", "Release", "아키텍처", "NEVRA", "취약점발견");
+            rpm.packages().forEach(p -> packages.add(p.name(), p.epoch(), p.version(), p.release(), p.architecture(), p.nevra(), "점검 불가 (RPM 대조 미지원)"));
 
             Table categories = table(workbook, styles, tables, "직군별 현황", "명세 열의 링크를 누르면 해당 직군의 상세 시트로 이동합니다.",
                     "직군", "코드", "프로세스 수", "JVM 수", "라이브러리 항목 수", "컨테이너 수", "프로세스 명세", "오픈소스 명세", "컨테이너 명세");

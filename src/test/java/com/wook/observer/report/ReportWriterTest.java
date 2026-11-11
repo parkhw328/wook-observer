@@ -23,7 +23,7 @@ class ReportWriterTest {
     @Test
     void separatesAllThreeSpecificationTypesByServiceCategoryAndIncludesEvidence() {
         var files = writer.documents(ReportFixtures.sample());
-        assertThat(files).hasSize(23).containsKeys("summary.md", "report.json", "services/application/processes.md",
+        assertThat(files).hasSize(25).containsKeys("summary.md", "report.json", "services/application/processes.md",
                 "services/application/open-source.md", "services/application/containers.md", "services/database/processes.md");
         assertThat(files.get("services/application/open-source.md")).contains("library", "1.2.3", "manifest");
         assertThat(files.get("services/database/open-source.md")).doesNotContain("1.2.3");
@@ -46,7 +46,7 @@ class ReportWriterTest {
                 }
             }
         }
-        assertThat(names).hasSize(24).contains("summary.md", "services/application/open-source.md", "report.json", "report.xlsx");
+        assertThat(names).hasSize(26).contains("summary.md", "services/application/open-source.md", "report.json", "report.xlsx");
         assertThat(names).noneMatch(name -> name.startsWith("/") || name.contains(".."));
     }
 
@@ -55,7 +55,7 @@ class ReportWriterTest {
         Path destination = temporary.resolve("scan");
         writer.writeDirectory(ReportFixtures.sample(), destination);
         try (var workbook = new XSSFWorkbook(destination.resolve("report.xlsx").toFile())) {
-            assertThat(workbook.getNumberOfSheets()).isEqualTo(30);
+            assertThat(workbook.getNumberOfSheets()).isEqualTo(32);
             assertThat(ExcelReportsTest.restoredSources(workbook)).isEqualTo(writer.documents(ReportFixtures.sample()));
         }
         String original = Files.readString(destination.resolve("summary.md"));

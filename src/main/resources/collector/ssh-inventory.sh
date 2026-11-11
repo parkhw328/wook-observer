@@ -12,6 +12,7 @@ printf 'SCOPE\t%s\n' "$(if [ -f /.dockerenv ] || [ -f /run/.containerenv ]; then
 if [ -r /etc/os-release ]; then
   awk -F= '$1=="ID" {gsub(/"/,"",$2); printf "FACT\thost:os.id\t%s\n",$2} $1=="VERSION_ID" {gsub(/"/,"",$2); printf "FACT\thost:os.version\t%s\n",$2}' /etc/os-release
 fi
+# SYSTEM_INVENTORY
 if ! command -v ps >/dev/null 2>&1; then printf 'ERROR\tps unavailable\n'; exit 2; fi
 ps -eo pid=,ppid=,user=,rss=,nlwp=,comm= | head -n 4097 | sed 's/^/PROCESS\t/'
 if command -v docker >/dev/null 2>&1 && command -v timeout >/dev/null 2>&1; then
