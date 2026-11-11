@@ -27,6 +27,7 @@ public class Targets {
         // Explicit projection: newly added credential columns must never reach the browser.
         var safe = new LinkedHashMap<>(store.one("SELECT " + PUBLIC_COLUMNS + ", host_key FROM scan_target WHERE id = ?", id));
         var secret = credentials(id);
+        safe.put("hostKeyFingerprint", HostKeys.describe(Store.string(safe, "host_key")).fingerprint());
         safe.put("hasPrivateKey", !Store.string(secret, "private_key").isEmpty());
         safe.put("hasSshPassword", !Store.string(secret, "ssh_password").isEmpty());
         safe.put("hasKeyPassphrase", !Store.string(secret, "key_passphrase").isEmpty());

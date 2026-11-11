@@ -4,34 +4,35 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Wook Observer · 서비스 점검</title>
+    <link rel="icon" href="/observer-mark.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/app.css" />
     <script defer src="/app.js"></script>
   </head>
   <body>
     <div class="app-layout">
       <aside class="sidebar">
-        <a class="brand" href="#overview"
-          ><span class="brand-icon">W</span
-          ><span>wook<strong>observer</strong></span></a
-        >
+        <a class="brand" href="#overview" aria-label="Wook Observer 대시보드">
+          <img class="brand-icon" src="/observer-mark.svg" width="48" height="48" alt="" />
+          <span class="brand-name"><span>wook</span><strong>observer</strong></span>
+        </a>
         <p class="nav-label">WORKSPACE</p>
         <nav aria-label="주 메뉴">
-          <a href="#overview" data-view="overview"><span>◫</span>대시보드</a
-          ><a href="#targets" data-view="targets"><span>▤</span>점검 대상</a
-          ><a href="#jobs" data-view="jobs"><span>◷</span>점검 이력</a
+          <a href="#overview" data-view="overview"><svg class="nav-icon" aria-hidden="true"><use href="/icons.svg#dashboard"></use></svg>대시보드</a
+          ><a href="#targets" data-view="targets"><svg class="nav-icon" aria-hidden="true"><use href="/icons.svg#servers"></use></svg>점검 대상</a
+          ><a href="#jobs" data-view="jobs"><svg class="nav-icon" aria-hidden="true"><use href="/icons.svg#history"></use></svg>점검 이력</a
           ><a href="#catalog" data-view="catalog"
-            ><span>◇</span>취약점 데이터</a
+            ><svg class="nav-icon" aria-hidden="true"><use href="/icons.svg#shield"></use></svg>취약점 데이터</a
           >
           <p class="nav-label admin-only">ADMINISTRATION</p>
           <a href="#updates" data-view="updates" class="admin-only"
-            ><span>↻</span>데이터 업데이트</a
+            ><svg class="nav-icon" aria-hidden="true"><use href="/icons.svg#refresh"></use></svg>데이터 업데이트</a
           ><a href="#users" data-view="users" class="admin-only"
-            ><span>♧</span>사용자 관리</a
+            ><svg class="nav-icon" aria-hidden="true"><use href="/icons.svg#users"></use></svg>사용자 관리</a
           >
         </nav>
         <div class="sidebar-bottom">
           <span class="dot"></span> 내부망 점검 플랫폼
-          <p>Wook Observer <b>1.2.1</b></p>
+          <p>Wook Observer <b>1.3.0</b></p>
         </div>
       </aside>
       <div class="main-shell">

@@ -11,7 +11,7 @@
     </parent>
     <groupId>com.wook</groupId>
     <artifactId>wook-observer</artifactId>
-    <version>1.2.1</version>
+    <version>1.3.0</version>
     <name>wook-observer</name>
     <description>Layered runtime inventory and service specifications</description>
     <properties>

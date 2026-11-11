@@ -28,7 +28,7 @@ public class PlatformSecurity {
         provider.setPasswordEncoder(new BCryptPasswordEncoder(12));
         http.authenticationProvider(provider)
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/", "/index.html", "/app.css", "/app.js", "/login.html", "/login.js", "/fonts/**", "/api/session", "/actuator/health", "/error").permitAll()
+                        .requestMatchers("/", "/index.html", "/app.css", "/app.js", "/login.html", "/login.js", "/observer-mark.svg", "/icons.svg", "/fonts/**", "/api/session", "/actuator/health", "/error").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().denyAll())

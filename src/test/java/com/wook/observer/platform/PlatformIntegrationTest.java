@@ -51,6 +51,8 @@ class PlatformIntegrationTest {
         Client anonymous = new Client();
         assertThat(anonymous.get("/api/targets").statusCode()).isEqualTo(401);
         assertThat(anonymous.get("/actuator/health").statusCode()).isEqualTo(200);
+        assertThat(anonymous.get("/observer-mark.svg").statusCode()).isEqualTo(200);
+        assertThat(anonymous.get("/icons.svg").statusCode()).isEqualTo(200);
         Client admin = login("admin", "Init1234");
         assertThat(admin.send("POST", "/api/admin/users", Map.of("username", "denied", "password", "a-password-1234", "role", "USER"), false).statusCode()).isEqualTo(403);
         assertThat(admin.send("POST", "/api/admin/users", Map.of("username", "reader", "password", "reader-password-123", "role", "USER"), true).statusCode()).isEqualTo(200);
@@ -158,6 +160,9 @@ class PlatformIntegrationTest {
         assertThat(safe.body()).doesNotContain("login-secret", "root-secret", "ssh_password", "privilege_password", "private_key", "key_passphrase",
                 Store.string(stored, "ssh_password"), Store.string(stored, "privilege_password"));
         assertThat(json.readTree(safe.body()).path("hasSshPassword").asBoolean()).isTrue();
+        assertThat(json.readTree(safe.body()).path("hasPrivateKey").asBoolean()).isFalse();
+        assertThat(json.readTree(safe.body()).path("hostKeyFingerprint").asText())
+                .isEqualTo(HostKeys.describe(input.get("hostKey").toString()).fingerprint());
         assertThat(admin.get("/api/targets").body()).doesNotContain("login-secret", "root-secret", "ssh_password", "privilege_password");
         input.put("sshPassword", ""); input.put("privilegePassword", "");
         assertThat(admin.send("PUT", "/api/admin/targets/" + id, input, true).statusCode()).isEqualTo(200);
