@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Assemble the verified 1.2.0 images and public catalogs into an air-gap bundle.
+"""Assemble the verified 1.2.1 images and public catalogs into an air-gap bundle.
 
 Runs only on the preparation machine. Never exports live containers, .env, or DB volumes.
 """
@@ -15,9 +15,9 @@ import tarfile
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "1.2.0"
+VERSION = "1.2.1"
 IMAGES = [
-    ("wook-observer:1.2.0", "wook-observer-1.2.0.tar.gz"),
+    ("wook-observer:1.2.1", "wook-observer-1.2.1.tar.gz"),
     ("postgres:18.6-bookworm", "postgres-18.6-bookworm.tar.gz"),
 ]
 

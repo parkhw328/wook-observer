@@ -2,7 +2,7 @@
 
 서버의 **실행 프로세스 → JVM·라이브러리 → Docker 컨테이너**를 조사하고 서비스 직군별 명세와 취약점 대조 결과를 제공하는 내부망 웹서비스입니다.
 
-현재 버전은 **1.2.0**입니다. 중앙 서비스는 Spring Boot 4.1.2 / Java 21.0.13 이상 / PostgreSQL 18로 구성하고 Docker Compose로 실행합니다. 대상 Linux 서버는 SSH로 연결하므로 **Java를 새로 설치할 필요가 없습니다.**
+현재 버전은 **1.2.1**입니다. 중앙 서비스는 Spring Boot 4.1.2 / Java 21.0.13 이상 / PostgreSQL 18로 구성하고 Docker Compose로 실행합니다. 대상 Linux 서버는 SSH로 연결하므로 **Java를 새로 설치할 필요가 없습니다.**
 
 ## Docker로 시작하기
 
@@ -16,6 +16,8 @@ docker compose ps
 ```
 
 브라우저에서 **http://localhost:18080**에 접속하고 `admin` / `.env`의 초기 비밀번호로 로그인하세요. 초기 계정은 DB가 비어 있을 때만 생성됩니다. 이후 비밀번호는 사용자 관리에서 변경합니다. `.env`를 바꿔도 기존 계정의 비밀번호는 초기화되지 않습니다.
+
+웹 계정 비밀번호는 **8자 이상, UTF-8 72바이트 이하**입니다. 최초 `.env` 관리자 비밀번호와 사용자 추가·비밀번호 변경에 동일하게 적용합니다. 계정 편집에서 비밀번호를 비워 두면 기존 값을 유지합니다.
 
 - `DATABASE_PASSWORD`: PostgreSQL 접속 비밀번호.
 - `OBSERVER_ENCRYPTION_KEY`: SSH 키·비밀번호 자격 증명의 AES-256-GCM 암호화 키. **DB 백업과 별도로 보관**하고 임의로 교체하지 마세요.
@@ -83,7 +85,7 @@ Python 3나 `jcmd`가 없어도 기본 점검은 수행하고 상세 미수집 �
 ```bash
 ./mvnw verify
 # DB 없이 로컬 서버를 한 번 점검하고 종료
-java -jar target/wook-observer-1.2.0.jar --observer.report-dir=./reports/check-001
+java -jar target/wook-observer-1.2.1.jar --observer.report-dir=./reports/check-001
 ```
 
 일회성 CLI는 기존 로컬 수집기를 유지하며 취약점 DB 대조를 수행하지 않습니다(`미실시`). CLI XLSX는 32개 시트입니다. 출력 디렉터리는 새 경로여야 합니다.
@@ -98,9 +100,9 @@ java -jar target/wook-observer-1.2.0.jar --observer.report-dir=./reports/check-0
 
 ```bash
 # 반입 서버: 함께 제공한 두 파일의 이름을 사용
-sha256sum -c wook-observer-1.2.0-linux-amd64-YYYYMMDD.tar.gz.sha256
-tar -xzf wook-observer-1.2.0-linux-amd64-YYYYMMDD.tar.gz
-cd wook-observer-1.2.0-linux-amd64-YYYYMMDD
+sha256sum -c wook-observer-1.2.1-linux-amd64-YYYYMMDD.tar.gz.sha256
+tar -xzf wook-observer-1.2.1-linux-amd64-YYYYMMDD.tar.gz
+cd wook-observer-1.2.1-linux-amd64-YYYYMMDD
 ./install.sh
 # 새 .env에서 관리자 비밀번호와 접속 주소·포트 확인
 ./start.sh
@@ -108,13 +110,13 @@ cd wook-observer-1.2.0-linux-amd64-YYYYMMDD
 
 `install.sh`는 파일 무결성 확인, `docker load`, 새 자격 증명 생성을 수행합니다. 오프라인 Compose에는 빌드 항목이 없으며 `pull_policy: never`와 `--pull never`로 실행합니다. 로그인 후 **데이터 업데이트**에서 원본 `maven-osv.zip`을 저장하고 즉시 갱신하세요. 기존 PC의 DB·계정·SSH 키·보고서는 반입 묶음에 넣지 않습니다.
 
-새 묶음을 만드는 **준비 PC에서만** Python 3와 Docker가 필요합니다. `v1.2.0`과 일치하는 `wook-observer:1.2.0`, `postgres:18.6-bookworm`의 amd64 이미지 및 `updates/maven-osv.zip`·manifest를 먼저 준비한 뒤 아래를 실행하세요. 이미지 내보내기에 `docker image save --platform`을 지원하는 Docker가 필요합니다.
+새 묶음을 만드는 **준비 PC에서만** Python 3와 Docker가 필요합니다. `v1.2.1`과 일치하는 `wook-observer:1.2.1`, `postgres:18.6-bookworm`의 amd64 이미지 및 `updates/maven-osv.zip`·manifest를 먼저 준비한 뒤 아래를 실행하세요. 이미지 내보내기에 `docker image save --platform`을 지원하는 Docker가 필요합니다.
 
 ```bash
-python3 scripts/package-offline.py --output resources/offline/wook-observer-1.2.0-linux-amd64-YYYYMMDD
+python3 scripts/package-offline.py --output resources/offline/wook-observer-1.2.1-linux-amd64-YYYYMMDD
 # 생성 디렉터리의 별도 복사본에서 설치·기동·데이터 반영 검증
 # 원본 디렉터리의 VERIFICATION.md에 결과 기록 (.env 생성 금지)
-python3 scripts/package-offline.py --output resources/offline/wook-observer-1.2.0-linux-amd64-YYYYMMDD --archive-only
+python3 scripts/package-offline.py --output resources/offline/wook-observer-1.2.1-linux-amd64-YYYYMMDD --archive-only
 ```
 
 최종 `.tar.gz`와 `.tar.gz.sha256`은 `resources/offline/`에 생성되며 Git에 추가하지 않습니다. 동일 버전의 앱 이미지를 다시 포장할 때는 앱 태그를 유지하고 `PACKAGE-MANIFEST.json`에 묶음 개정·생성 시각·이미지/데이터 해시를 기록합니다. 소스 스냅샷만으로 폐쇄망에서 재빌드하려면 별도의 Maven 의존성 반입이 필요합니다.

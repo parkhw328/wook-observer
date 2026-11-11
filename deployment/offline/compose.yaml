@@ -1,7 +1,7 @@
 name: wook-observer-offline
 services:
   app:
-    image: wook-observer:1.2.0
+    image: wook-observer:1.2.1
     platform: linux/amd64
     pull_policy: never
     restart: unless-stopped

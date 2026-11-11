@@ -1,7 +1,7 @@
 name: wook-observer
 services:
   app:
-    image: wook-observer:1.2.0
+    image: wook-observer:1.2.1
     build: .
     restart: unless-stopped
     init: true

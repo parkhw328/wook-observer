@@ -92,8 +92,8 @@ public class Accounts implements UserDetailsService, ApplicationRunner {
     }
 
     private void validatePassword(String password) {
-        if (password == null || password.length() < 12 || password.getBytes(StandardCharsets.UTF_8).length > 72) {
-            throw new ApiProblem(400, "비밀번호는 12자 이상, UTF-8 72바이트 이하여야 합니다.");
+        if (password == null || password.length() < 8 || password.getBytes(StandardCharsets.UTF_8).length > 72) {
+            throw new ApiProblem(400, "비밀번호는 8자 이상, UTF-8 72바이트 이하여야 합니다.");
         }
     }
 

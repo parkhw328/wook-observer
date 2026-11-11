@@ -30,7 +30,7 @@ import static org.mockito.Mockito.when;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
         "spring.datasource.url=jdbc:h2:mem:platform;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE",
         "spring.datasource.username=sa", "spring.datasource.password=",
-        "observer.platform.bootstrap-user=admin", "observer.platform.bootstrap-password=Integration-password-123",
+        "observer.platform.bootstrap-user=admin", "observer.platform.bootstrap-password=Init1234",
         "observer.platform.encryption-key=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="})
 class PlatformIntegrationTest {
     @Value("${local.server.port}") int port;
@@ -51,7 +51,7 @@ class PlatformIntegrationTest {
         Client anonymous = new Client();
         assertThat(anonymous.get("/api/targets").statusCode()).isEqualTo(401);
         assertThat(anonymous.get("/actuator/health").statusCode()).isEqualTo(200);
-        Client admin = login("admin", "Integration-password-123");
+        Client admin = login("admin", "Init1234");
         assertThat(admin.send("POST", "/api/admin/users", Map.of("username", "denied", "password", "a-password-1234", "role", "USER"), false).statusCode()).isEqualTo(403);
         assertThat(admin.send("POST", "/api/admin/users", Map.of("username", "reader", "password", "reader-password-123", "role", "USER"), true).statusCode()).isEqualTo(200);
         Client reader = login("reader", "reader-password-123");
@@ -65,9 +65,50 @@ class PlatformIntegrationTest {
     }
 
     @Test
+    void acceptsEightCharacterPasswordsAndKeepsTheUtf8ByteLimit() throws Exception {
+        // The test application's bootstrap administrator also uses an eight-character password.
+        Client admin = login("admin", "Init1234");
+        for (String invalid : new String[]{"1234567", "x".repeat(73), "가".repeat(25), ""}) {
+            var response = admin.send("POST", "/api/admin/users", Map.of("username", "too-short-or-long",
+                    "password", invalid, "role", "USER"), true);
+            assertThat(response.statusCode()).isEqualTo(400);
+            assertThat(response.body()).contains("8자 이상", "72바이트");
+        }
+        assertThat(store.rows("SELECT username FROM app_user WHERE username = ?", "too-short-or-long")).isEmpty();
+        assertThat(admin.send("POST", "/api/admin/users", Map.of("username", "eight-character-user", "password", "Eight123", "role", "USER"), true)
+                .statusCode()).isEqualTo(200);
+        assertThat(login("eight-character-user", "Eight123").get("/api/targets").statusCode()).isEqualTo(200);
+        assertThat(admin.send("POST", "/api/admin/users", Map.of("username", "max-byte-user", "password", "x".repeat(72), "role", "USER"), true)
+                .statusCode()).isEqualTo(200);
+        assertThat(login("max-byte-user", "x".repeat(72)).get("/api/targets").statusCode()).isEqualTo(200);
+    }
+
+    @Test
+    void resetsToEightCharactersRevokesSessionsAndPreservesBlankPasswordEdits() throws Exception {
+        Client admin = login("admin", "Init1234");
+        assertThat(admin.send("POST", "/api/admin/users", Map.of("username", "reset-boundary-user", "password", "Initial-password-123", "role", "USER"), true)
+                .statusCode()).isEqualTo(200);
+        Client existing = login("reset-boundary-user", "Initial-password-123");
+        var before = store.one("SELECT password_hash, revision FROM app_user WHERE username = ?", "reset-boundary-user");
+        assertThat(admin.send("PUT", "/api/admin/users/reset-boundary-user", Map.of("password", "1234567", "role", "USER", "enabled", true), true)
+                .statusCode()).isEqualTo(400);
+        assertThat(store.one("SELECT password_hash, revision FROM app_user WHERE username = ?", "reset-boundary-user")).isEqualTo(before);
+        assertThat(existing.get("/api/targets").statusCode()).isEqualTo(200);
+        assertThat(admin.send("PUT", "/api/admin/users/reset-boundary-user", Map.of("password", "Reset123", "role", "USER", "enabled", true), true)
+                .statusCode()).isEqualTo(200);
+        assertThat(existing.get("/api/targets").statusCode()).isEqualTo(401);
+        assertThat(login("reset-boundary-user", "Reset123").get("/api/targets").statusCode()).isEqualTo(200);
+        String hash = Store.string(store.one("SELECT password_hash FROM app_user WHERE username = ?", "reset-boundary-user"), "password_hash");
+        assertThat(admin.send("PUT", "/api/admin/users/reset-boundary-user", Map.of("password", "", "role", "USER", "enabled", true), true)
+                .statusCode()).isEqualTo(200);
+        assertThat(Store.string(store.one("SELECT password_hash FROM app_user WHERE username = ?", "reset-boundary-user"), "password_hash")).isEqualTo(hash);
+        assertThat(login("reset-boundary-user", "Reset123").get("/api/targets").statusCode()).isEqualTo(200);
+    }
+
+    @Test
     void registeredTargetProducesPersistedAssessmentAndAllDownloads() throws Exception {
         when(ssh.collect(anyMap())).thenReturn(ReportFixtures.sample());
-        Client admin = login("admin", "Integration-password-123");
+        Client admin = login("admin", "Init1234");
         String secret = "-----BEGIN OPENSSH PRIVATE KEY-----\nTEST-ONLY-PRIVATE-CONTENT\n-----END OPENSSH PRIVATE KEY-----";
         var response = admin.send("POST", "/api/admin/targets", Map.of("name", "fixture-target", "host", "127.0.0.1", "port", 22,
                 "sshUser", "observer", "privateKey", secret, "hostKey", "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4f", "description", "test"), true);
@@ -101,7 +142,7 @@ class PlatformIntegrationTest {
 
     @Test
     void passwordAndRootSecretsAreEncryptedHiddenPreservedAndClearedOnModeSwitch() throws Exception {
-        Client admin = login("admin", "Integration-password-123");
+        Client admin = login("admin", "Init1234");
         var input = new java.util.LinkedHashMap<String, Object>(Map.of("name", "password-target", "host", "127.0.0.1", "port", 22,
                 "sshUser", "operator", "hostKey", "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4f comment@host", "description", "auth test"));
         input.putAll(Map.of("authType", "PASSWORD", "sshPassword", "login-secret-$'`!", "privilegeMode", "SU_ROOT", "privilegePassword", "root-secret-$'`!"));
@@ -143,7 +184,7 @@ class PlatformIntegrationTest {
         Client anonymous = new Client();
         anonymous.refresh();
         assertThat(anonymous.send("POST", "/api/admin/ssh/host-keys", Map.of("host", "127.0.0.1", "port", 22), true).statusCode()).isEqualTo(401);
-        Client admin = login("admin", "Integration-password-123");
+        Client admin = login("admin", "Init1234");
         assertThat(admin.send("POST", "/api/admin/ssh/host-keys", Map.of("host", "127.0.0.1", "port", 22), false).statusCode()).isEqualTo(403);
         assertThat(admin.send("POST", "/api/admin/ssh/host-keys", Map.of("host", "-f /etc/passwd", "port", 22), true).statusCode()).isEqualTo(400);
         assertThat(anonymous.binary("/fonts/JetBrainsMono-Regular.woff2").statusCode()).isEqualTo(200);
