@@ -1,0 +1,24 @@
+spring:
+  application:
+    name: wook-observer
+server:
+  address: 127.0.0.1
+  port: 8080
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+observer:
+  docker-enabled: true
+  docker-socket: /var/run/docker.sock
+  jvm-attach-enabled: true
+  command-timeout: 3s
+  max-processes: 4096
+  max-containers: 256
+  max-java-processes: 64
+  max-jars-per-process: 512
+  service-overrides: {}

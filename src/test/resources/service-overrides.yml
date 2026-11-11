@@ -1,0 +1,3 @@
+observer:
+  service-overrides:
+    "[container:orders]": MESSAGING

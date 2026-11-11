@@ -1,0 +1,12 @@
+/resources/
+/target/
+/reports/
+/.tools/
+/.idea/
+/.vscode/
+*.iml
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
