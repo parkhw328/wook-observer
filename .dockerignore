@@ -6,3 +6,5 @@
 !src/
 !src/**
 !Dockerfile
+!scripts/
+!scripts/ssh-askpass.sh

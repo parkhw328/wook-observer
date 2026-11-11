@@ -1,22 +1,56 @@
+@font-face {
+  font-family: "Noto Sans KR";
+  src: url("/fonts/NotoSansKR-Variable.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-024F, U+1E00-1EFF;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-024F, U+1E00-1EFF;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono-SemiBold.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-024F, U+1E00-1EFF;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-024F, U+1E00-1EFF;
+}
 :root {
   color-scheme: light;
   --navy: #132a3d;
   --ink: #203548;
-  --muted: #6d7e8c;
+  --muted: #596d7d;
   --accent: #007f79;
   --line: #dfe7ec;
   --bg: #f4f7f9;
   --red: #b74248;
   --orange: #ad6a13;
-  font-family:
-    Inter,
-    Pretendard,
-    "Noto Sans KR",
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif;
-  font-size: 14px;
+  font-family: "JetBrains Mono", "Noto Sans KR", sans-serif;
+  font-size: 18px;
+  line-height: 1.65;
+  font-synthesis: none;
 }
 * {
   box-sizing: border-box;
@@ -85,27 +119,27 @@ p {
   margin-top: 0;
 }
 h1 {
-  font-size: 28px;
+  font-size: 36px;
   line-height: 1.4;
   letter-spacing: -0.9px;
 }
 h2 {
-  font-size: 19px;
+  font-size: 24px;
   letter-spacing: -0.4px;
 }
 h3 {
-  font-size: 15px;
+  font-size: 18px;
 }
 .muted,
 .small {
   color: var(--muted);
 }
 .small {
-  font-size: 12px;
+  font-size: 16px;
   line-height: 1.7;
 }
 .eyebrow {
-  font-size: 11px;
+  font-size: 15px;
   letter-spacing: 1.6px;
   font-weight: 700;
   color: var(--accent);
@@ -116,7 +150,7 @@ h3 {
   align-items: center;
   gap: 10px;
   color: inherit;
-  font-size: 20px;
+  font-size: 24px;
   font-weight: 700;
   letter-spacing: -0.5px;
 }
@@ -129,12 +163,12 @@ h3 {
   background: #ffffff0c;
   border-radius: 9px;
   color: #70d5c2;
-  font-size: 22px;
+  font-size: 26px;
 }
 .brand strong {
   display: block;
   font-weight: 400;
-  font-size: 11px;
+  font-size: 15px;
   color: #abc1ce;
   letter-spacing: 2.8px;
   margin-top: 1px;
@@ -144,7 +178,7 @@ h3 {
   min-height: 100vh;
 }
 .sidebar {
-  width: 222px;
+  width: 280px;
   flex-shrink: 0;
   background: var(--navy);
   color: #d7e6ee;
@@ -158,7 +192,7 @@ h3 {
   margin: 0 10px 28px;
 }
 .nav-label {
-  font-size: 10px;
+  font-size: 14px;
   letter-spacing: 1.7px;
   color: #8da4b3;
   padding: 0 13px;
@@ -175,7 +209,7 @@ nav a {
   font-weight: 500;
 }
 nav a span {
-  font-size: 19px;
+  font-size: 24px;
   width: 20px;
   text-align: center;
 }
@@ -191,10 +225,10 @@ nav a.active {
   margin-top: auto;
   padding: 24px 12px 0;
   color: #a6bdca;
-  font-size: 12px;
+  font-size: 16px;
 }
 .sidebar-bottom p {
-  font-size: 10px;
+  font-size: 14px;
   margin: 12px 0 0;
   color: #849cab;
 }
@@ -207,18 +241,18 @@ nav a.active {
   margin-right: 5px;
 }
 .main-shell {
-  margin-left: 222px;
-  width: calc(100% - 222px);
+  margin-left: 280px;
+  width: calc(100% - 280px);
 }
 .topbar {
-  height: 70px;
+  min-height: 82px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 0 36px;
   background: white;
   border-bottom: 1px solid var(--line);
-  font-size: 12px;
+  font-size: 16px;
   color: var(--muted);
 }
 .topbar > div {
@@ -274,10 +308,10 @@ main#content {
 }
 .kpi p {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 16px;
 }
 .kpi strong {
-  font-size: 34px;
+  font-size: 42px;
   letter-spacing: -1px;
   font-weight: 650;
   display: block;
@@ -285,7 +319,7 @@ main#content {
 }
 .kpi small {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 15px;
 }
 .kpi.alert strong {
   color: var(--red);
@@ -321,13 +355,13 @@ table {
   border-collapse: collapse;
   width: 100%;
   text-align: left;
-  font-size: 12px;
+  font-size: 16px;
 }
 th {
   background: #f4f7f9;
   font-weight: 600;
-  color: #738491;
-  font-size: 11px;
+  color: #526879;
+  font-size: 15px;
   letter-spacing: 0.2px;
   white-space: nowrap;
 }
@@ -343,15 +377,15 @@ td {
 }
 td .button,
 td button {
-  padding: 6px 10px;
-  font-size: 11px;
+  padding: 9px 13px;
+  font-size: 15px;
 }
 tr:last-child td {
   border-bottom: 0;
 }
 .badge {
   display: inline-block;
-  font-size: 10px;
+  font-size: 14px;
   padding: 4px 8px;
   background: #eef3f6;
   border-radius: 5px;
@@ -385,7 +419,7 @@ tr:last-child td {
 .empty b {
   display: block;
   color: var(--ink);
-  font-size: 16px;
+  font-size: 20px;
   margin-bottom: 10px;
 }
 .empty p {
@@ -398,7 +432,7 @@ tr:last-child td {
   border: 1px solid #d6e8e8;
   color: #416c70;
   border-radius: 7px;
-  font-size: 12px;
+  font-size: 16px;
   line-height: 1.8;
   margin-bottom: 24px;
 }
@@ -422,8 +456,8 @@ tr:last-child td {
   margin: 16px 0 8px;
 }
 .target-address {
-  font-family: ui-monospace, monospace;
-  font-size: 12px;
+  font-family: "JetBrains Mono", "Noto Sans KR", monospace;
+  font-size: 16px;
   color: var(--muted);
   overflow-wrap: anywhere;
 }
@@ -461,11 +495,11 @@ tr:last-child td {
 }
 .step-list b {
   display: block;
-  font-size: 13px;
+  font-size: 17px;
   margin-bottom: 6px;
 }
 .step-list p {
-  font-size: 12px;
+  font-size: 16px;
   color: var(--muted);
   line-height: 1.7;
   margin: 0;
@@ -476,7 +510,7 @@ tr:last-child td {
   padding: 13px 0;
   border-bottom: 1px solid #edf1f4;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 16px;
 }
 .inline-metric strong {
   color: var(--ink);
@@ -488,7 +522,7 @@ form .grid {
 }
 label {
   display: block;
-  font-size: 12px;
+  font-size: 16px;
   font-weight: 600;
   margin: 16px 0;
   color: var(--ink);
@@ -508,7 +542,8 @@ select {
   margin-top: 8px;
   border: 1px solid #ccd8e1;
   border-radius: 6px;
-  padding: 11px 12px;
+  padding: 13px 15px;
+  min-height: 50px;
   background: #fff;
   color: var(--ink);
   font-weight: 400;
@@ -516,8 +551,8 @@ select {
 textarea {
   resize: vertical;
   min-height: 105px;
-  font-family: ui-monospace, monospace;
-  font-size: 12px;
+  font-family: "JetBrains Mono", "Noto Sans KR", monospace;
+  font-size: 16px;
 }
 input:focus,
 textarea:focus,
@@ -559,7 +594,7 @@ label.check input {
 }
 .error {
   color: var(--red);
-  font-size: 12px;
+  font-size: 16px;
   min-height: 18px;
 }
 .details-header {
@@ -583,7 +618,7 @@ label.check input {
   border-radius: 6px;
 }
 .detail-grid strong {
-  font-size: 25px;
+  font-size: 30px;
   display: block;
   margin-top: 5px;
 }
@@ -619,13 +654,13 @@ dialog #modal-close {
   max-width: 90vw;
   box-shadow: 0 8px 30px #0002;
   z-index: 10;
-  font-size: 13px;
+  font-size: 17px;
   line-height: 1.7;
 }
 footer {
   padding: 20px 36px 25px;
   color: #81919c;
-  font-size: 10px;
+  font-size: 14px;
 }
 .login-body {
   background: #fff;
@@ -644,26 +679,26 @@ footer {
   justify-content: space-between;
 }
 .login-intro .brand {
-  font-size: 22px;
+  font-size: 26px;
 }
 .login-intro .brand > span:last-child {
   font-weight: 400;
   color: #a6c0cc;
 }
 .login-intro h1 {
-  font-size: 37px;
+  font-size: 44px;
   line-height: 1.6;
   font-weight: 600;
   letter-spacing: -1.5px;
 }
 .login-intro .eyebrow {
   color: #66caba;
-  font-size: 10px;
+  font-size: 14px;
 }
 .login-intro > div > p:not(.eyebrow) {
   color: #aac2d0;
   line-height: 1.9;
-  font-size: 14px;
+  font-size: 18px;
 }
 .layers {
   border: 1px solid #3a5669;
@@ -676,7 +711,7 @@ footer {
   color: #bfd1db;
   max-width: 330px;
   margin-top: 38px;
-  font-size: 11px;
+  font-size: 15px;
   letter-spacing: 2px;
 }
 .layers i {
@@ -690,10 +725,10 @@ footer {
 }
 .login-panel form {
   width: 100%;
-  max-width: 350px;
+  max-width: 460px;
 }
 .login-panel h2 {
-  font-size: 24px;
+  font-size: 28px;
   margin: 14px 0;
 }
 .login-panel .muted {
@@ -714,11 +749,11 @@ footer {
 }
 @media (max-width: 1100px) {
   .sidebar {
-    width: 190px;
+    width: 250px;
   }
   .main-shell {
-    margin-left: 190px;
-    width: calc(100% - 190px);
+    margin-left: 250px;
+    width: calc(100% - 250px);
   }
   main#content {
     padding: 26px;
@@ -736,7 +771,7 @@ footer {
     padding: 40px 8%;
   }
   .login-intro h1 {
-    font-size: 30px;
+    font-size: 34px;
   }
 }
 @media (max-width: 740px) {
@@ -758,7 +793,7 @@ footer {
   }
   .sidebar nav a {
     white-space: nowrap;
-    font-size: 12px;
+    font-size: 16px;
     padding: 8px;
   }
   .nav-label,
@@ -771,7 +806,7 @@ footer {
   }
   .topbar {
     padding: 0 18px;
-    height: 55px;
+    min-height: 76px;
   }
   main#content {
     padding: 24px 18px;
@@ -781,7 +816,7 @@ footer {
     flex-direction: column;
   }
   .page-head h1 {
-    font-size: 24px;
+    font-size: 28px;
   }
   .kpis {
     grid-template-columns: repeat(2, 1fr);
@@ -808,7 +843,7 @@ footer {
   }
   .detail-grid {
     grid-template-columns: repeat(3, 1fr);
-    font-size: 11px;
+    font-size: 15px;
   }
   .detail-grid div {
     padding: 10px;
@@ -836,3 +871,27 @@ td .button {
   width: max-content;
   max-width: calc(100vw - 36px);
 }
+
+.connection-panel { max-width: 1120px; }
+fieldset { border: 0; border-bottom: 1px solid var(--line); padding: 0 0 28px; margin: 0 0 28px; min-width: 0; }
+legend { font-size: 24px; font-weight: 700; margin-bottom: 10px; padding: 0; }
+.step-number { display: inline-block; color: var(--accent); margin-right: 12px; font-size: 20px; }
+.field-description { color: var(--muted); font-size: 16px; line-height: 1.8; }
+#host-key-results { margin-top: 20px; overflow-wrap: anywhere; }
+#host-key-choice { font-size: 15px; }
+input[type="checkbox"] { min-height: 0; width: 20px; height: 20px; flex-shrink: 0; }
+@media (max-width: 740px) {
+  .topbar { flex-wrap: wrap; gap: 8px; padding-top: 14px; padding-bottom: 14px; }
+  .form-actions { flex-wrap: wrap; }
+  .head-actions { width: 100%; }
+  .brand { font-size: 22px; }
+  .login-panel { padding: 30px 22px; }
+  .kpi { padding: 16px; }
+  .kpi strong { font-size: 34px; }
+}
+
+label { font-size: 18px; }
+input, textarea, select { font-size: 18px; }
+label small { font-size: 16px; }
+
+.fingerprint { display: block; padding: 16px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; overflow-wrap: anywhere; font-size: 17px; }

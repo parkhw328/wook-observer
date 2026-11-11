@@ -38,6 +38,7 @@ class PlatformIntegrationTest {
     @Autowired Catalog catalog;
     @Autowired CatalogUpdates updates;
     @Autowired SecretVault vault;
+    @Autowired Targets targets;
     @MockitoBean SshCollector ssh;
     @TempDir static Path updateDirectory;
     private final JsonMapper json = JsonMapper.builder().build();
@@ -69,7 +70,7 @@ class PlatformIntegrationTest {
         Client admin = login("admin", "Integration-password-123");
         String secret = "-----BEGIN OPENSSH PRIVATE KEY-----\nTEST-ONLY-PRIVATE-CONTENT\n-----END OPENSSH PRIVATE KEY-----";
         var response = admin.send("POST", "/api/admin/targets", Map.of("name", "fixture-target", "host", "127.0.0.1", "port", 22,
-                "sshUser", "observer", "privateKey", secret, "hostKey", "ssh-ed25519 " + "A".repeat(64), "description", "test"), true);
+                "sshUser", "observer", "privateKey", secret, "hostKey", "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4f", "description", "test"), true);
         assertThat(response.statusCode()).isEqualTo(200);
         String target = json.readTree(response.body()).path("id").asText();
         assertThat(admin.get("/api/targets").body()).doesNotContain("PRIVATE", "private_key");
@@ -96,6 +97,57 @@ class PlatformIntegrationTest {
                 }
             }
         }
+    }
+
+    @Test
+    void passwordAndRootSecretsAreEncryptedHiddenPreservedAndClearedOnModeSwitch() throws Exception {
+        Client admin = login("admin", "Integration-password-123");
+        var input = new java.util.LinkedHashMap<String, Object>(Map.of("name", "password-target", "host", "127.0.0.1", "port", 22,
+                "sshUser", "operator", "hostKey", "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4f comment@host", "description", "auth test"));
+        input.putAll(Map.of("authType", "PASSWORD", "sshPassword", "login-secret-$'`!", "privilegeMode", "SU_ROOT", "privilegePassword", "root-secret-$'`!"));
+        var response = admin.send("POST", "/api/admin/targets", input, true);
+        assertThat(response.statusCode()).isEqualTo(200);
+        String id = json.readTree(response.body()).path("id").asText();
+        var stored = targets.credentials(id);
+        assertThat(Store.string(stored, "ssh_password")).doesNotContain("login-secret");
+        assertThat(Store.string(stored, "privilege_password")).doesNotContain("root-secret");
+        assertThat(targets.decrypt(stored, "ssh_password")).isEqualTo("login-secret-$'`!");
+        assertThat(targets.decrypt(stored, "privilege_password")).isEqualTo("root-secret-$'`!");
+        var safe = admin.get("/api/admin/targets/" + id);
+        assertThat(safe.body()).doesNotContain("login-secret", "root-secret", "ssh_password", "privilege_password", "private_key", "key_passphrase",
+                Store.string(stored, "ssh_password"), Store.string(stored, "privilege_password"));
+        assertThat(json.readTree(safe.body()).path("hasSshPassword").asBoolean()).isTrue();
+        assertThat(admin.get("/api/targets").body()).doesNotContain("login-secret", "root-secret", "ssh_password", "privilege_password");
+        input.put("sshPassword", ""); input.put("privilegePassword", "");
+        assertThat(admin.send("PUT", "/api/admin/targets/" + id, input, true).statusCode()).isEqualTo(200);
+        assertThat(targets.credentials(id).get("ssh_password")).isEqualTo(stored.get("ssh_password"));
+        input.put("privilegeMode", "SUDO");
+        assertThat(admin.send("PUT", "/api/admin/targets/" + id, input, true).statusCode()).isEqualTo(400);
+        input.put("privilegeMode", "NONE"); input.put("authType", "KEY");
+        assertThat(admin.send("PUT", "/api/admin/targets/" + id, input, true).statusCode()).isEqualTo(400);
+        input.put("privateKey", "-----BEGIN OPENSSH PRIVATE KEY-----\nTEST-PRIVATE\n-----END OPENSSH PRIVATE KEY-----");
+        input.put("keyPassphrase", "key-passphrase-test");
+        assertThat(admin.send("PUT", "/api/admin/targets/" + id, input, true).statusCode()).isEqualTo(200);
+        var switched = targets.credentials(id);
+        assertThat(Store.string(switched, "ssh_password")).isEmpty();
+        assertThat(Store.string(switched, "privilege_password")).isEmpty();
+        assertThat(targets.decrypt(switched, "key_passphrase")).isEqualTo("key-passphrase-test");
+        assertThat(admin.get("/api/admin/targets/" + id).body()).doesNotContain("key-passphrase-test", "TEST-PRIVATE");
+        input.put("authType", "PASSWORD"); input.put("sshPassword", "line1\nline2");
+        assertThat(admin.send("PUT", "/api/admin/targets/" + id, input, true).statusCode()).isEqualTo(400);
+        assertThat(targets.credentials(id).get("auth_type")).isEqualTo("KEY");
+    }
+
+    @Test
+    void hostProbeIsAdminOnlyCsrfProtectedAndRejectsCommandArguments() throws Exception {
+        Client anonymous = new Client();
+        anonymous.refresh();
+        assertThat(anonymous.send("POST", "/api/admin/ssh/host-keys", Map.of("host", "127.0.0.1", "port", 22), true).statusCode()).isEqualTo(401);
+        Client admin = login("admin", "Integration-password-123");
+        assertThat(admin.send("POST", "/api/admin/ssh/host-keys", Map.of("host", "127.0.0.1", "port", 22), false).statusCode()).isEqualTo(403);
+        assertThat(admin.send("POST", "/api/admin/ssh/host-keys", Map.of("host", "-f /etc/passwd", "port", 22), true).statusCode()).isEqualTo(400);
+        assertThat(anonymous.binary("/fonts/JetBrainsMono-Regular.woff2").statusCode()).isEqualTo(200);
+        assertThat(anonymous.binary("/fonts/NotoSansKR-Variable.ttf").statusCode()).isEqualTo(200);
     }
 
     @Test

@@ -33,4 +33,14 @@ class SshCollectorTest {
         assertThat(result.facts()).isEmpty();
         assertThatThrownBy(()->collector.parse(text.replace("DONE\n",""))).isInstanceOf(ApiProblem.class);
     }
+    @Test
+    void recordsActualAccountScopeIncludingPtyLineEndings() {
+        String snapshot = "HOST\thost\t6.1\tx86_64\t2\t1048576\r\nACCESS\t1000\toperator\r\nPROCESS\t2 1 operator 1024 1 java\r\nDONE\r\n";
+        var result = collector.parse(snapshot);
+        assertThat(result.facts()).containsEntry("host:effective_uid", "1000").containsEntry("host:effective_user", "operator");
+        assertThat(result.issues()).anyMatch(issue -> issue.layer().equals("permission"));
+        var root = collector.parse(snapshot.replace("ACCESS\t1000\toperator", "ACCESS\t0\troot"));
+        assertThat(root.facts()).containsEntry("host:effective_uid", "0");
+        assertThat(root.issues()).noneMatch(issue -> issue.layer().equals("permission"));
+    }
 }

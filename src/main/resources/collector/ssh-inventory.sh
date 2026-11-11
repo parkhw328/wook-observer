@@ -1,5 +1,5 @@
 #!/bin/sh
-# Fixed, read-only inventory. No target Java installation, agent, sudo, or uploaded executable is required.
+# Fixed, read-only inventory. No target Java installation or uploaded executable is required. Privilege is selected before this script runs.
 export LC_ALL=C
 export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 if [ "$(uname -s)" != Linux ]; then
@@ -7,6 +7,7 @@ if [ "$(uname -s)" != Linux ]; then
   exit 2
 fi
 printf 'HOST\t%s\t%s\t%s\t%s\t%s\n' "$(hostname)" "$(uname -r)" "$(uname -m)" "$(getconf _NPROCESSORS_ONLN)" "$(awk '/MemTotal:/{print $2 * 1024}' /proc/meminfo)"
+printf 'ACCESS\t%s\t%s\n' "$(id -u)" "$(id -un)"
 printf 'SCOPE\t%s\n' "$(if [ -f /.dockerenv ] || [ -f /run/.containerenv ]; then echo container; else echo host; fi)"
 if [ -r /etc/os-release ]; then
   awk -F= '$1=="ID" {gsub(/"/,"",$2); printf "FACT\thost:os.id\t%s\n",$2} $1=="VERSION_ID" {gsub(/"/,"",$2); printf "FACT\thost:os.version\t%s\n",$2}' /etc/os-release

@@ -134,7 +134,7 @@ async function overview() {
     ) +
     `<div class="kpis"><article class="kpi"><p>등록된 점검 대상</p><strong>${number(targets.length)}</strong><small>SSH로 연결하는 Linux 서버</small></article><article class="kpi"><p>진행 중인 점검</p><strong>${jobs.filter((j) => ["RUNNING", "QUEUED"].includes(j.status)).length}</strong><small>동시 2개 · 대기 최대 16개</small></article><article class="kpi ${findingCount ? "alert" : ""}"><p>최근 100회 발견·의심 항목</p><strong>${number(findingCount)}</strong><small>반복 점검의 중복 항목 포함</small></article><article class="kpi"><p>내부 취약점·설정 데이터</p><strong>${number(catalog.counts.reduce((s, c) => s + c.count, 0))}</strong><small>카탈로그 버전 ${catalog.revision}</small></article></div>` +
     `<div class="panel"><div class="panel-title"><h2>최근 점검</h2><a class="small" href="#jobs">전체 이력 보기 →</a></div>${jobsTable(jobs.slice(0, 5))}</div>` +
-    `<div class="split"><section class="panel"><div class="panel-title"><h2>점검에서 보고서까지</h2><span class="badge info">Java 설치 없이 기본 점검</span></div><ol class="step-list"><li><span class="number">01</span><div><b>점검 대상 연결</b><p>SSH 계정과 접속 키, 확인한 서버 호스트 키를 등록합니다.</p></div></li><li><span class="number">02</span><div><b>실행 환경 수집과 기준 대조</b><p>프로세스·JVM·컨테이너를 수집하고 내부 CVE·CCE 기준과 대조합니다.</p></div></li><li><span class="number">03</span><div><b>서비스 직군별 보고서</b><p>프로세스·오픈소스·컨테이너 명세를 XLSX, Markdown, JSON으로 확인합니다.</p></div></li></ol></section><section class="panel"><div class="panel-title"><h2>취약점 데이터 상태</h2><a class="small" href="#catalog">목록 보기 →</a></div><div class="inline-metric"><span>CVE / OSV 권고</span><strong>${number(counts.CVE)}건</strong></div><div class="inline-metric"><span>CCE 설정 식별자</span><strong>${number(counts.CCE)}건</strong></div><div class="inline-metric"><span>내부 설정 규칙</span><strong>${number(counts.POLICY)}건</strong></div><p class="small">최근 반영 ${date(catalog.imported_at)}</p><div class="note warn">${catalog.counts.reduce((sum, c) => sum + c.count, 0) <= 5 ? "기본 제공 목록은 시작용 5건입니다. 운영 범위에 맞는 데이터를 반입하세요." : "저장한 데이터의 범위와 갱신 시각을 확인하세요."} 미발견은 전체 시스템의 안전을 의미하지 않습니다.</div></section></div>`
+    `<div class="split"><section class="panel"><div class="panel-title"><h2>점검에서 보고서까지</h2><span class="badge info">Java 설치 없이 기본 점검</span></div><ol class="step-list"><li><span class="number">01</span><div><b>점검 대상 연결</b><p>SSH 키·비밀번호와 점검 권한을 선택하고 서버 지문을 확인합니다.</p></div></li><li><span class="number">02</span><div><b>실행 환경 수집과 기준 대조</b><p>프로세스·JVM·컨테이너를 수집하고 내부 CVE·CCE 기준과 대조합니다.</p></div></li><li><span class="number">03</span><div><b>서비스 직군별 보고서</b><p>프로세스·오픈소스·컨테이너 명세를 XLSX, Markdown, JSON으로 확인합니다.</p></div></li></ol></section><section class="panel"><div class="panel-title"><h2>취약점 데이터 상태</h2><a class="small" href="#catalog">목록 보기 →</a></div><div class="inline-metric"><span>CVE / OSV 권고</span><strong>${number(counts.CVE)}건</strong></div><div class="inline-metric"><span>CCE 설정 식별자</span><strong>${number(counts.CCE)}건</strong></div><div class="inline-metric"><span>내부 설정 규칙</span><strong>${number(counts.POLICY)}건</strong></div><p class="small">최근 반영 ${date(catalog.imported_at)}</p><div class="note warn">${catalog.counts.reduce((sum, c) => sum + c.count, 0) <= 5 ? "기본 제공 목록은 시작용 5건입니다. 운영 범위에 맞는 데이터를 반입하세요." : "저장한 데이터의 범위와 갱신 시각을 확인하세요."} 미발견은 전체 시스템의 안전을 의미하지 않습니다.</div></section></div>`
   );
 }
 async function targetView() {
@@ -149,7 +149,7 @@ async function targetView() {
     ) +
     '<div class="note">Linux의 SSH·셸·ps가 기본 수집에 필요합니다. 컨테이너는 Docker 조회 권한, Java 상세는 Python 3 또는 jcmd 등 대상에서 사용할 수 있는 도구에 따라 수집 범위가 달라집니다.</div>' +
     (targets.length
-      ? `<div class="target-grid">${targets.map((t) => `<article class="target-card"><span class="badge info">SSH / LINUX</span><h2>${esc(t.name)}</h2><p class="target-address">${esc(t.ssh_user)}@${esc(t.host)}:${t.port}</p><p class="small">${esc(t.description || "등록된 설명이 없습니다.")}</p><div class="actions">${admin() ? `<button class="quiet" data-action="edit-target" data-id="${esc(t.id)}">연결 설정</button>` : ""}<button class="primary" data-action="scan" data-id="${esc(t.id)}">점검 시작 →</button></div></article>`).join("")}</div>`
+      ? `<div class="target-grid">${targets.map((t) => `<article class="target-card"><div class="head-actions"><span class="badge info">SSH / LINUX</span><span class="badge">${t.auth_type === "PASSWORD" ? "비밀번호 인증" : "SSH 키 인증"}</span><span class="badge">${esc({NONE:"접속 계정 권한", SU_ROOT:"root 전환 · su", SUDO:"root 전환 · sudo", SUDO_NOPASSWD:"root 전환 · sudo"}[t.privilege_mode || "NONE"])}</span></div><h2>${esc(t.name)}</h2><p class="target-address">${esc(t.ssh_user)}@${esc(t.host)}:${t.port}</p><p class="small">${esc(t.description || "등록된 설명이 없습니다.")}</p><div class="actions">${admin() ? `<button class="quiet" data-action="edit-target" data-id="${esc(t.id)}">연결 설정</button>` : ""}<button class="primary" data-action="scan" data-id="${esc(t.id)}">점검 시작 →</button></div></article>`).join("")}</div>`
       : empty(
           "아직 등록된 대상이 없습니다",
           "관리자가 대상 서버의 SSH 접속 정보를 등록하면 점검을 시작할 수 있습니다.",
@@ -157,16 +157,105 @@ async function targetView() {
   );
 }
 async function targetForm(id) {
-  const target = id
-    ? await api("/admin/targets/" + encodeURIComponent(id))
-    : {};
-  $("#content").innerHTML =
-    pageHead(
-      id ? "대상 연결 설정" : "새 점검 대상 등록",
-      "서버 관리자가 확인한 호스트 공개 키로 접속 대상을 검증합니다.",
-    ) +
-    `<section class="panel"><form id="target-form" data-id="${esc(id || "")}"><div class="grid"><label>대상 이름<input name="name" required maxlength="120" value="${esc(target.name)}" placeholder="예: 주문 서비스 운영 서버"></label><label>SSH 호스트<input name="host" required maxlength="253" value="${esc(target.host)}" placeholder="192.168.10.20 또는 내부 DNS"></label><label>SSH 포트<input name="port" type="number" min="1" max="65535" required value="${target.port || 22}"></label><label>SSH 계정<input name="sshUser" required maxlength="64" value="${esc(target.ssh_user)}" autocomplete="off"></label></div><label>서버 호스트 공개 키<textarea name="hostKey" required placeholder="ssh-ed25519 AAAA…">${esc(target.host_key)}</textarea><small>서버의 /etc/ssh/ssh_host_ed25519_key.pub에서 유형과 base64 두 필드를 확인하세요. 처음 연결할 때도 자동 신뢰하지 않습니다.</small></label><label>접속용 SSH 개인 키<textarea name="privateKey" ${id ? "" : "required"} autocomplete="off" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"></textarea><small>암호 없는 전용 접속 키를 사용하세요. DB에는 암호화해 저장합니다.${id ? " 빈칸으로 두면 기존 키를 유지합니다." : ""}</small></label><label>설명<textarea name="description" maxlength="1000" placeholder="운영 환경, 담당 팀, 접근 범위 등을 기록하세요.">${esc(target.description)}</textarea></label><div class="form-actions"><button type="button" data-action="cancel-target">취소</button><button class="primary" type="submit">연결 정보 저장</button></div></form></section>`;
+  const target = id ? await api("/admin/targets/" + encodeURIComponent(id)) : {};
+  const selected = (value, expected) => value === expected ? "selected" : "";
+  $("#content").innerHTML = pageHead(
+    id ? "대상 연결 설정" : "새 점검 대상 등록",
+    "접속 인증과 점검 권한을 선택하고, 서버 지문을 확인해 연결합니다.",
+  ) + `<section class="panel connection-panel"><form id="target-form" data-id="${esc(id || "")}" data-auth="${esc(target.auth_type || "")}" data-privilege="${esc(target.privilege_mode || "")}" data-has-key="${!!target.hasPrivateKey}" data-has-password="${!!target.hasSshPassword}" data-has-privilege="${!!target.hasPrivilegePassword}">
+    <fieldset><legend><span class="step-number">01</span> 서버 연결</legend>
+    <div class="grid"><label>대상 이름<input name="name" required maxlength="120" value="${esc(target.name)}" placeholder="예: 주문 서비스 운영 서버"></label>
+    <label>SSH 호스트<input name="host" required maxlength="253" value="${esc(target.host)}" placeholder="192.168.10.20 또는 내부 DNS"></label>
+    <label>SSH 포트<input name="port" type="number" min="1" max="65535" required value="${target.port || 22}"></label>
+    <label>SSH 접속 계정<input name="sshUser" required maxlength="64" value="${esc(target.ssh_user)}" autocomplete="off" placeholder="예: observer 또는 root"></label></div></fieldset>
+    <fieldset><legend><span class="step-number">02</span> 서버 신원 확인</legend>
+    <p class="field-description">호스트 공개 키는 접속하려는 서버를 확인합니다. 아래의 로그인용 SSH 키·비밀번호와는 별도입니다.</p>
+    <label>호스트 키 등록 방법<select id="host-key-method"><option value="MANUAL">공개 키 직접 입력</option><option value="PROBE">서버에서 조회 후 지문 확인</option></select></label>
+    <div id="host-key-probe" hidden><button type="button" data-action="probe-host-key">서버 호스트 키 조회</button><div id="host-key-results" aria-live="polite"></div></div>
+    <label>서버 호스트 공개 키<textarea name="hostKey" required rows="3" maxlength="8192" spellcheck="false" placeholder="ssh-ed25519 AAAA…">${esc(target.host_key)}</textarea><small>.pub 파일 또는 known_hosts의 한 줄을 붙여 넣으세요. 끝의 주석도 허용합니다.</small></label>
+    <p id="host-key-status" class="small" aria-live="polite"></p></fieldset>
+    <fieldset><legend><span class="step-number">03</span> SSH 로그인</legend>
+    <label>인증 방식<select name="authType"><option value="KEY" ${selected(target.auth_type, "KEY")}>SSH 개인 키</option><option value="PASSWORD" ${selected(target.auth_type, "PASSWORD")}>SSH 계정 비밀번호</option></select></label>
+    <div id="key-auth-fields"><label>접속용 SSH 개인 키<textarea name="privateKey" autocomplete="off" spellcheck="false" rows="5" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"></textarea><small>${target.hasPrivateKey ? "개인 키가 저장되어 있습니다. 빈칸이면 기존 키를 유지합니다." : "PEM 또는 OpenSSH 형식의 개인 키를 입력하세요."}</small></label>
+    <label>개인 키 암호 <span class="muted">(선택)</span><input name="keyPassphrase" type="password" autocomplete="new-password" maxlength="1024"><small>암호화된 개인 키인 경우 입력하세요. 새 키를 넣으면 암호도 새로 입력해야 합니다.${target.hasKeyPassphrase ? " 저장된 키를 유지하면 기존 암호도 유지됩니다." : ""}</small></label></div>
+    <div id="password-auth-fields" hidden><label>SSH 계정 비밀번호<input name="sshPassword" type="password" autocomplete="new-password" maxlength="1024"><small>${target.hasSshPassword ? "비밀번호가 저장되어 있습니다. 빈칸이면 기존 값을 유지합니다." : "접속 계정의 SSH 비밀번호를 입력하세요."}</small></label></div>
+    </fieldset><fieldset><legend><span class="step-number">04</span> 점검 권한</legend>
+    <label>점검 실행 방식<select name="privilegeMode"><option value="NONE" ${selected(target.privilege_mode, "NONE")}>접속 계정 권한으로 점검</option><option value="SU_ROOT" ${selected(target.privilege_mode, "SU_ROOT")}>root 비밀번호로 전환 · su</option><option value="SUDO" ${selected(target.privilege_mode, "SUDO")}>sudo 인증 비밀번호로 root 전환</option><option value="SUDO_NOPASSWD" ${selected(target.privilege_mode, "SUDO_NOPASSWD")}>비밀번호 없는 sudo로 root 전환</option></select></label>
+    <p id="privilege-help" class="field-description"></p>
+    <div id="privilege-password-field" hidden><label><span id="privilege-password-label">root 비밀번호</span><input name="privilegePassword" type="password" autocomplete="new-password" maxlength="1024"><small>${target.hasPrivilegePassword ? "같은 전환 방식을 유지하면 빈칸은 기존 비밀번호를 보존합니다." : "선택한 권한 전환에 사용할 비밀번호를 입력하세요."}</small></label></div>
+    <div class="note">root 전환을 선택하면 실제 root 권한을 확인한 뒤 점검합니다. 전환 실패는 점검 실패로 기록하며, 도구·네임스페이스 제한으로 수집하지 못한 항목은 보고서에 남깁니다.</div>
+    </fieldset><label>설명<textarea name="description" maxlength="1000" placeholder="운영 환경, 담당 팀, 접근 범위 등을 기록하세요.">${esc(target.description)}</textarea></label>
+    <p class="small">개인 키와 비밀번호는 암호화해 저장하며, 저장된 비밀값은 화면에 다시 표시하지 않습니다.</p>
+    <div class="form-actions"><button type="button" data-action="cancel-target">취소</button><button class="primary" type="submit">연결 정보 저장</button></div></form></section>`;
+  updateTargetFields();
 }
+function updateTargetFields() {
+  const form = $("#target-form");
+  if (!form) return;
+  const key = form.elements.authType.value === "KEY";
+  $("#key-auth-fields").hidden = !key;
+  $("#password-auth-fields").hidden = key;
+  form.elements.privateKey.disabled = !key;
+  form.elements.keyPassphrase.disabled = !key;
+  form.elements.sshPassword.disabled = key;
+  form.elements.privateKey.required = key && !(form.dataset.auth === "KEY" && form.dataset.hasKey === "true");
+  form.elements.sshPassword.required = !key && !(form.dataset.auth === "PASSWORD" && form.dataset.hasPassword === "true");
+  const mode = form.elements.privilegeMode.value;
+  const needsPassword = ["SU_ROOT", "SUDO"].includes(mode);
+  $("#privilege-password-field").hidden = !needsPassword;
+  form.elements.privilegePassword.disabled = !needsPassword;
+  form.elements.privilegePassword.required = needsPassword && !(form.dataset.privilege === mode && form.dataset.hasPrivilege === "true");
+  $("#privilege-password-label").textContent = mode === "SU_ROOT" ? "root 계정 비밀번호" : "sudo 인증 비밀번호";
+  $("#privilege-help").textContent = {
+    NONE: "접속 계정이 root이면 그대로 root 권한을 사용합니다. 일반 계정은 접근 가능한 범위만 점검합니다.",
+    SU_ROOT: "일반 계정으로 SSH 접속한 다음 root 비밀번호로 su 전환합니다. 대상 서버가 해당 계정의 su 사용을 허용해야 합니다.",
+    SUDO: "대상 서버의 sudo 권한이 필요합니다. 일반적으로 SSH 접속 계정의 비밀번호를 입력하며, 실제 sudo 정책을 따릅니다.",
+    SUDO_NOPASSWD: "대상 서버에서 해당 계정의 비밀번호 없는 sudo 실행을 허용한 경우 사용합니다.",
+  }[mode];
+}
+function resetHostProbe() {
+  const form = $("#target-form");
+  if (!form || $("#host-key-method").value !== "PROBE") return;
+  form.dataset.hostConfirmed = "false";
+  form.elements.hostKey.value = "";
+  $("#host-key-results").replaceChildren();
+  $("#host-key-status").textContent = "서버에서 조회한 지문을 관리자가 확인한 값과 대조한 뒤 등록하세요.";
+}
+async function probeHostKey() {
+  const form = $("#target-form");
+  if (!form.elements.host.reportValidity() || !form.elements.port.reportValidity()) return;
+  resetHostProbe();
+  const host = form.elements.host.value, port = Number(form.elements.port.value);
+  const keys = await api("/admin/ssh/host-keys", {method: "POST", body: {host, port}});
+  if (form !== $("#target-form") || host !== form.elements.host.value || port !== Number(form.elements.port.value) || $("#host-key-method").value !== "PROBE") return;
+  $("#host-key-results").innerHTML = `<label>조회한 서버 지문<select id="host-key-choice">${keys.map(key => `<option value="${esc(key.publicKey)}" data-fingerprint="${esc(key.fingerprint)}">${esc(key.type)}</option>`).join("")}</select></label><output id="host-fingerprint" class="fingerprint">${esc(keys[0].fingerprint)}</output><p class="field-description">조회만으로 서버 신원이 검증되지는 않습니다. 서버 관리자가 확인한 SHA-256 지문과 대조하세요.</p><label class="check"><input id="host-key-verified" type="checkbox">서버 지문이 확인한 값과 일치합니다.</label><button type="button" data-action="confirm-host-key" disabled>확인한 호스트 키 사용</button>`;
+}
+document.addEventListener("change", event => {
+  const form = event.target.closest("#target-form");
+  if (!form) return;
+  if (["authType", "privilegeMode"].includes(event.target.name)) updateTargetFields();
+  if (event.target.id === "host-key-method") {
+    const probe = event.target.value === "PROBE";
+    $("#host-key-probe").hidden = !probe;
+    form.elements.hostKey.readOnly = probe;
+    $("#host-key-status").textContent = "";
+    if (probe) resetHostProbe();
+  }
+  if (event.target.id === "host-key-choice") {
+    $("#host-fingerprint").textContent = event.target.selectedOptions[0].dataset.fingerprint;
+    $("#host-key-verified").checked = false;
+    $("[data-action=confirm-host-key]").disabled = true;
+    form.dataset.hostConfirmed = "false";
+    form.elements.hostKey.value = "";
+  }
+  if (event.target.id === "host-key-verified") {
+    $("[data-action=confirm-host-key]").disabled = !event.target.checked;
+    if (!event.target.checked) { form.dataset.hostConfirmed = "false"; form.elements.hostKey.value = ""; }
+  }
+});
+document.addEventListener("input", event => {
+  if (event.target.closest("#target-form") && ["host", "port"].includes(event.target.name)) resetHostProbe();
+});
 async function catalogView() {
   const [status, rows] = await Promise.all([
     api("/catalog/status"),
@@ -332,6 +421,17 @@ document.addEventListener("click", async (event) => {
       case "cancel-target":
         await render();
         break;
+      case "probe-host-key":
+        await probeHostKey();
+        break;
+      case "confirm-host-key": {
+        if (!$("#host-key-verified").checked) break;
+        const form = $("#target-form");
+        form.elements.hostKey.value = $("#host-key-choice").value;
+        form.dataset.hostConfirmed = "true";
+        $("#host-key-status").textContent = "확인한 서버 호스트 키가 선택되었습니다.";
+        break;
+      }
       case "scan":
         await api(
           "/targets/" + encodeURIComponent(button.dataset.id) + "/scans",
@@ -386,6 +486,7 @@ document.addEventListener("submit", async (event) => {
   const data = Object.fromEntries(new FormData(form));
   try {
     if (form.id === "target-form") {
+      if ($("#host-key-method").value === "PROBE" && form.dataset.hostConfirmed !== "true") throw new Error("조회한 서버 지문을 확인하고 호스트 키를 선택하세요.");
       data.port = Number(data.port);
       await api(
         "/admin/targets" +

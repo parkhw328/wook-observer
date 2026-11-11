@@ -25,21 +25,21 @@ public class PlatformController {
     private final Catalog catalog;
     private final CatalogUpdates updates;
     private final ReportWriter reports;
-    public PlatformController(Accounts accounts, Targets targets, ScanJobs jobs, Catalog catalog, CatalogUpdates updates, ReportWriter reports) {
-        this.accounts = accounts; this.targets = targets; this.jobs = jobs; this.catalog = catalog; this.updates = updates; this.reports = reports;
+    private final HostKeys hostKeys;
+    public PlatformController(Accounts accounts, Targets targets, ScanJobs jobs, Catalog catalog, CatalogUpdates updates, ReportWriter reports, HostKeys hostKeys) {
+        this.accounts = accounts; this.targets = targets; this.jobs = jobs; this.catalog = catalog; this.updates = updates; this.reports = reports; this.hostKeys = hostKeys;
     }
 
     @GetMapping("/session")
     public Map<String, Object> session(Authentication auth, CsrfToken csrf) {
         String role = auth == null ? "" : auth.getAuthorities().stream().findFirst().map(Object::toString).orElse("").replace("ROLE_", "");
-        return Map.of("username", auth == null ? "" : auth.getName(), "role", role, "csrf", csrf.getToken(), "csrfHeader", csrf.getHeaderName(), "version", "1.0.0");
+        return Map.of("username", auth == null ? "" : auth.getName(), "role", role, "csrf", csrf.getToken(), "csrfHeader", csrf.getHeaderName(), "version", "1.1.0");
     }
     @GetMapping("/targets") public List<Map<String, Object>> targets() { return targets.list(); }
     @GetMapping("/admin/targets/{id}") public Map<String, Object> target(@PathVariable String id) {
-        var safe = new java.util.LinkedHashMap<>(targets.credentials(id));
-        safe.remove("private_key");
-        return safe;
+        return targets.details(id);
     }
+    @PostMapping("/admin/ssh/host-keys") public List<HostKeys.Key> hostKeys(@RequestBody HostKeys.Endpoint endpoint) throws Exception { return hostKeys.probe(endpoint); }
     @PostMapping("/admin/targets") public Map<String, String> addTarget(@RequestBody Targets.Input input, Authentication auth) { return Map.of("id", targets.save(null, input, auth.getName())); }
     @PutMapping("/admin/targets/{id}") public Map<String, String> editTarget(@PathVariable String id, @RequestBody Targets.Input input, Authentication auth) { return Map.of("id", targets.save(id, input, auth.getName())); }
     @GetMapping("/jobs") public List<Map<String, Object>> jobs() { return jobs.list(); }
