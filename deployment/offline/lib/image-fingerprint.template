@@ -1,0 +1,1 @@
+{{.Os}}/{{.Architecture}}|{{json .RootFS.Layers}}|{{json .Config.Entrypoint}}|{{json .Config.Cmd}}|{{json .Config.Env}}|{{json .Config.User}}|{{json .Config.WorkingDir}}|{{json .Config.ExposedPorts}}|{{json .Config.Volumes}}|{{json .Config.Healthcheck}}|{{json .Config.StopSignal}}|{{json .Config.OnBuild}}|{{json .Config.Labels}}

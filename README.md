@@ -85,18 +85,30 @@ java -jar target/wook-observer-1.0.0.jar --observer.report-dir=./reports/check-0
 
 ## 폐쇄망 배포와 백업
 
-외부 빌드 환경에서 이미지를 준비해 반입합니다. 반입 서버에서는 Maven·npm·외부 API 호출 없이 기동합니다.
+**Linux x86_64(amd64), Docker Engine·Compose 설치 완료** 환경용 반입 묶음을 제공합니다. 앱·PostgreSQL 이미지 전체, Maven 취약점 ZIP, CCE/정책 JSON, 설정·운영 스크립트, SHA-256과 소스 스냅샷을 포함합니다. 반입 서버에는 Java·Maven·Python·OpenSSL을 설치할 필요가 없습니다. 실행 절차는 묶음의 `README.md`를 따르며 원본은 [폐쇄망 설치 안내](deployment/offline/README.md)입니다.
 
 ```bash
-# 외부 빌드 환경
-docker compose build
-docker pull postgres:18.6-bookworm
-docker save wook-observer:1.0.0 postgres:18.6-bookworm -o wook-observer-images.tar
-# 내부 서버: compose.yaml, scripts/init-env.sh, updates/와 이미지 파일 반입
-docker load -i wook-observer-images.tar
-./scripts/init-env.sh
-docker compose up -d --no-build --pull never
+# 반입 서버: 함께 제공한 두 파일의 이름을 사용
+sha256sum -c wook-observer-1.0.0-linux-amd64-YYYYMMDD.tar.gz.sha256
+tar -xzf wook-observer-1.0.0-linux-amd64-YYYYMMDD.tar.gz
+cd wook-observer-1.0.0-linux-amd64-YYYYMMDD
+./install.sh
+# 새 .env에서 관리자 비밀번호와 접속 주소·포트 확인
+./start.sh
 ```
+
+`install.sh`는 파일 무결성 확인, `docker load`, 새 자격 증명 생성을 수행합니다. 오프라인 Compose에는 빌드 항목이 없으며 `pull_policy: never`와 `--pull never`로 실행합니다. 로그인 후 **데이터 업데이트**에서 원본 `maven-osv.zip`을 저장하고 즉시 갱신하세요. 기존 PC의 DB·계정·SSH 키·보고서는 반입 묶음에 넣지 않습니다.
+
+새 묶음을 만드는 **준비 PC에서만** Python 3와 Docker가 필요합니다. `v1.0.0`과 일치하는 `wook-observer:1.0.0`, `postgres:18.6-bookworm`의 amd64 이미지 및 `updates/maven-osv.zip`·manifest를 먼저 준비한 뒤 아래를 실행하세요. 이미지 내보내기에 `docker image save --platform`을 지원하는 Docker가 필요합니다.
+
+```bash
+python3 scripts/package-offline.py --output resources/offline/wook-observer-1.0.0-linux-amd64-YYYYMMDD
+# 생성 디렉터리의 별도 복사본에서 설치·기동·데이터 반영 검증
+# 원본 디렉터리의 VERIFICATION.md에 결과 기록 (.env 생성 금지)
+python3 scripts/package-offline.py --output resources/offline/wook-observer-1.0.0-linux-amd64-YYYYMMDD --archive-only
+```
+
+최종 `.tar.gz`와 `.tar.gz.sha256`은 `resources/offline/`에 생성되며 Git에 추가하지 않습니다. 동일 버전의 앱 이미지를 다시 포장할 때는 앱 태그를 유지하고 `PACKAGE-MANIFEST.json`에 묶음 개정·생성 시각·이미지/데이터 해시를 기록합니다. 소스 스냅샷만으로 폐쇄망에서 재빌드하려면 별도의 Maven 의존성 반입이 필요합니다.
 
 `docker compose exec -T db pg_dump -U observer -d observer -Fc > observer.dump`로 DB를 백업하고 `.env`의 암호화 키를 별도로 보관하세요. 복구는 중지된 앱과 비어 있는 대상 DB에 `pg_restore`로 진행하고 기동 전 계정·암호화 키를 함께 확인하세요. `docker compose down`은 볼륨을 보존하지만 `down -v`는 DB를 삭제합니다.
 
