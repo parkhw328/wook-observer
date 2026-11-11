@@ -1,172 +1,107 @@
 # Wook Observer
 
-서버의 **호스트 → 프로세스 → JVM·라이브러리**, **Docker → 컨테이너 → 내부 서비스**를 조사하고 서비스 직군별 명세 문서로 만드는 Spring Boot 도구입니다.
+서버의 **실행 프로세스 → JVM·라이브러리 → Docker 컨테이너**를 조사하고 서비스 직군별 명세와 취약점 대조 결과를 제공하는 내부망 웹서비스입니다.
 
-현재 버전: **0.2.0**. Linux에서 실행 가능한 범위의 메타데이터를 수집합니다. 확인하지 못한 정보와 미지원 계층은 보고서에 표시합니다.
+현재 버전은 **1.0.0**입니다. 중앙 서비스는 Spring Boot 4.1.2 / Java 21.0.13 이상 / PostgreSQL 18로 구성하고 Docker Compose로 실행합니다. 대상 Linux 서버는 SSH로 연결하므로 **Java를 새로 설치할 필요가 없습니다.**
 
-## 프로젝트 관리
+## Docker로 시작하기
 
-- [규칙](rules/rules.md): 개발·분석·문서화·버전 정책
-- [요구사항](rules/requirements.md): 확정 요구사항과 단계별 범위
-- [버전 이력](rules/versions.md): 구현 및 검증 기록
-- GitHub: <https://github.com/parkhw328/wook-observer>
-
-루트 `resources/`는 공유 폴더이며 커밋하지 않습니다. Spring 설정을 담는 `src/main/resources/`는 Git으로 관리합니다.
-
-## 빌드 및 실행
-
-필수 환경은 **JDK 21.0.13 이상인 Java 21 계열**입니다. Spring Boot 4.1.2와 Maven Wrapper를 사용하며 Maven을 별도로 설치할 필요는 없습니다. 최초 빌드에는 의존성 다운로드를 위한 인터넷 연결이 필요합니다.
+Docker Engine, Docker Compose, `openssl`이 필요합니다. 최초 이미지 빌드는 인터넷이 가능한 환경에서 수행합니다.
 
 ```bash
-java -version
+./scripts/init-env.sh
+# 생성된 .env의 OBSERVER_ADMIN_PASSWORD를 로컬에서 확인하세요.
+docker compose up -d --build
+docker compose ps
+```
+
+브라우저에서 **http://localhost:18080**에 접속하고 `admin` / `.env`의 초기 비밀번호로 로그인하세요. 초기 계정은 DB가 비어 있을 때만 생성됩니다. 이후 비밀번호는 사용자 관리에서 변경합니다. `.env`를 바꿔도 기존 계정의 비밀번호는 초기화되지 않습니다.
+
+- `DATABASE_PASSWORD`: PostgreSQL 접속 비밀번호.
+- `OBSERVER_ENCRYPTION_KEY`: SSH 개인 키의 AES-256-GCM 암호화 키. **DB 백업과 별도로 보관**하고 임의로 교체하지 마세요.
+- `OBSERVER_BIND_ADDRESS`, `OBSERVER_PORT`: 기본 `127.0.0.1:18080`. 다른 PC에 제공하려면 내부 HTTPS 프록시를 구성하세요. HTTPS 사용 시 `COOKIE_SECURE=true`를 지정합니다.
+- `OBSERVER_MIRROR_HOSTS`: 정기 업데이트를 허용할 내부 HTTPS 미러 호스트. 쉼표로 구분하며 기본값은 비어 있습니다.
+
+앱은 비루트 계정·읽기 전용 파일시스템으로 실행하며 DB 포트와 호스트 Docker 소켓을 공개하지 않습니다. 데이터는 Compose의 `database` 볼륨에 보관합니다. **앱은 단일 인스턴스로 운영**하세요. 작업 큐와 재시작 복구는 단일 인스턴스를 기준으로 합니다.
+
+## 점검 대상 등록과 실행
+
+1. 관리자 → **점검 대상 → 대상 등록**에서 이름, SSH 호스트·포트·계정을 입력합니다.
+2. 암호 없는 전용 SSH 개인 키와, 서버 관리자가 확인한 **호스트 공개 키**의 `유형 base64` 두 필드를 입력합니다. 예: `/etc/ssh/ssh_host_ed25519_key.pub`. 키 자동 신뢰와 비밀번호 SSH 로그인은 지원하지 않습니다.
+3. **점검 시작**을 누릅니다. 사용자 계정도 등록된 모든 대상의 점검과 결과 조회가 가능합니다.
+4. **점검 이력 → 상세 보기**에서 수집 제한, 취약점 판정, XLSX·ZIP·JSON·요약 MD를 확인합니다.
+
+호스트 주소는 중앙 앱 컨테이너에서 접속할 수 있어야 합니다. 대상에 `127.0.0.1`을 입력하면 앱 컨테이너 자신을 가리키므로, 같은 PC를 점검할 때도 해당 PC의 접근 가능한 SSH 주소를 입력하세요.
+
+| 수집 영역 | 대상 서버 조건 / 한계 |
+| --- | --- |
+| OS·프로세스 | Linux, SSH, POSIX 셸, `ps` 및 기본 명령. Java 불필요. 접근 가능한 PID 범위만 조사 |
+| Docker | Docker CLI, `timeout`, 로컬 소켓 조회 권한. 컨테이너 정보와 `docker top` PID 연결 |
+| JVM 속성 | 실행 중인 Java 서비스, 사용할 수 있는 `jcmd`, `timeout`, attach 권한 |
+| Java 라이브러리 | Python 3와 `/proc`·JAR 읽기 권한. 실행 JAR, 클래스패스, 열린 JAR, Spring Boot/WAR 중첩 JAR의 메타데이터 |
+| 설정 점검 | 수집된 `sysctl`, `sshd -T` 전역 값, Docker 특권·읽기 전용 루트·사용자 설정 |
+
+Python 3나 `jcmd`가 없어도 기본 점검은 수행하고 상세 미수집 사유를 남깁니다. SSH 수집은 고정된 조회 스크립트를 표준 입력으로 전달하며 대상에 파일이나 Java를 설치하지 않습니다. `sudo`, 임의 명령, 컨테이너 변경, 힙 덤프·강제 GC는 실행하지 않습니다. `jcmd`는 선별 속성 조회를 위한 attach만 사용합니다.
+
+동시 점검은 2개, 대기열은 16개, SSH 작업은 최대 180초입니다. 프로세스 4,096개, 컨테이너 256개, JVM 64개, JVM별 라이브러리 512개 등 제한을 적용합니다. 컨테이너 안의 SSH 서버에서는 호스트 PID와 컨테이너 PID를 임의 연결하지 않습니다.
+
+## 취약점 데이터와 관리자
+
+- **사용자 관리**: 사용자 추가, ADMIN/USER 권한 변경, 비밀번호 재설정, 비활성화. 변경된 계정의 기존 세션은 다음 요청에서 만료됩니다.
+- **취약점 데이터**: DB에 저장한 CVE/OSV, CCE, 내부 설정 규칙 검색.
+- **데이터 업데이트**: OSV JSON/ZIP 또는 자체 묶음 파일 업로드, 반입 폴더/내부 미러 원본 설정, 즉시 갱신, 6필드 cron 예약, 결과 이력.
+- 기본 목록은 **CVE 2건·RHEL CCE 2건·Docker 정책 1건**입니다. 전체 취약점 DB가 아니며 운영 범위의 최신 데이터를 별도로 반입해야 합니다.
+- 정확한 Maven 좌표와 버전을 OSV 영향 범위와 비교합니다. CCE는 식별자 목록만으로 판정하지 않고 **적용 OS·실제 설정·기대값**이 있는 규칙만 점검합니다. 내부 Docker 규칙은 CCE와 구분합니다.
+- 판정은 `발견`, `의심`, `미발견(점검 범위 내)`, `점검 불가`로 구분합니다. 버전 일치는 악용 가능성을 확정하지 않습니다. 기준이나 메타데이터가 없으면 정상으로 처리하지 않습니다.
+
+반입 형식·출처·갱신 정책은 [docs/catalog.md](docs/catalog.md)를 확인하세요. 새 데이터를 반입한 뒤 **새 점검을 시작**하면 적용됩니다. 과거 보고서는 당시 데이터 버전과 결과를 보존합니다.
+
+인터넷이 가능한 준비 PC에서 `python3 scripts/prepare-maven-catalog.py`를 실행하면 공식 OSV Maven 전체 덤프를 `updates/maven-osv.zip`에 받고 크기·ZIP CRC·SHA-256을 확인합니다. 이 ZIP을 폐쇄망으로 반입해 관리자 화면에서 업로드하거나 업데이트 원본을 `maven-osv.zip`으로 저장한 뒤 갱신하세요. 다운로드 스크립트는 서비스 실행 중 자동 호출되지 않습니다.
+
+## 보고서
+
+동일 스냅샷을 DB에 저장하며 다시 다운로드해도 서버를 재점검하지 않습니다.
+
+- `summary.md`, `report.json`, `report.xlsx`와 `services/<직군>/{processes,open-source,containers}.md`.
+- 직군: 애플리케이션·웹·데이터베이스·캐시·메시징·인프라·기타. 분류는 이름 기반 휴리스틱과 설정 보정입니다.
+- 웹 점검 XLSX는 **31개 시트**: 기존 명세·원문 30개와 취약점 상세. 각 직군 명세에 `취약점발견` 컬럼, 요약에 카탈로그 버전·반영 시각·판정 범위를 포함합니다.
+- ZIP은 XLSX와 MD·JSON을 포함한 **24개 파일**입니다. 긴 원문은 분할해 원문 시트에 보존합니다. 수집 문자열은 수식으로 실행하지 않습니다.
+
+## 개발 및 기존 일회성 JAR
+
+**JDK 21 계열 21.0.13 이상**이 필요합니다. Maven Wrapper를 사용합니다.
+
+```bash
 ./mvnw verify
-java -jar target/wook-observer-0.2.0.jar
+# DB 없이 로컬 서버를 한 번 점검하고 종료
+java -jar target/wook-observer-1.0.0.jar --observer.report-dir=./reports/check-001
 ```
 
-빌드와 JAR 기동 시 Java 버전을 검사합니다. 이 작업공간에서 받은 검증용 JDK를 사용하려면 다음과 같이 지정할 수 있습니다. `.tools/`는 Git에서 제외됩니다.
+일회성 CLI는 기존 로컬 수집기를 유지하며 취약점 DB 대조를 수행하지 않습니다(`미실시`). CLI XLSX는 기존 30개 시트입니다. 출력 디렉터리는 새 경로여야 합니다.
+
+기존 로컬 HTTP API가 꼭 필요한 경우 `--spring.profiles.active=collector`로 실행합니다. 이 모드는 인증 없이 **loopback 전용**으로 운영하며 `POST /api/v1/observations`, `/api/v1/reports`, `/api/v1/reports.xlsx`를 제공합니다. 중앙 웹서비스에서는 이 API를 제공하지 않습니다.
+
+소스 구조: `collector/` 로컬 수집, `platform/` 계정·DB·SSH·작업·취약점, `model/` 스냅샷, `report/` 보고서, `src/main/resources/static/` 웹 화면, `db/migration/` Flyway 스키마. 테스트는 `src/test/java/`의 JUnit 기반입니다.
+
+## 폐쇄망 배포와 백업
+
+외부 빌드 환경에서 이미지를 준비해 반입합니다. 반입 서버에서는 Maven·npm·외부 API 호출 없이 기동합니다.
 
 ```bash
-export JAVA_HOME="$PWD/.tools/jdk-21.0.13+9"
-export PATH="$JAVA_HOME/bin:$PATH"
+# 외부 빌드 환경
+docker compose build
+docker pull postgres:18.6-bookworm
+docker save wook-observer:1.0.0 postgres:18.6-bookworm -o wook-observer-images.tar
+# 내부 서버: compose.yaml, scripts/init-env.sh, updates/와 이미지 파일 반입
+docker load -i wook-observer-images.tar
+./scripts/init-env.sh
+docker compose up -d --no-build --pull never
 ```
 
-기본 HTTP 주소는 `127.0.0.1:8080`입니다. 분석은 요청 시 실행하며 시작만으로 서버를 조사하지 않습니다.
+`docker compose exec -T db pg_dump -U observer -d observer -Fc > observer.dump`로 DB를 백업하고 `.env`의 암호화 키를 별도로 보관하세요. 복구는 중지된 앱과 비어 있는 대상 DB에 `pg_restore`로 진행하고 기동 전 계정·암호화 키를 함께 확인하세요. `docker compose down`은 볼륨을 보존하지만 `down -v`는 DB를 삭제합니다.
 
-```bash
-curl --fail http://127.0.0.1:8080/actuator/health
+## 현재 범위와 프로젝트 지침
 
-# JSON 스냅샷
-curl --fail -X POST http://127.0.0.1:8080/api/v1/observations
+Windows, Kubernetes/containerd, 비 Java OS 패키지 CVE, 이미지 레이어 전체 스캔, 실제 동적 클래스 로딩, systemd/리스닝 포트/호출 관계는 후속 범위입니다. 원격 JVM의 세부 수집은 권한·네임스페이스·도구에 의존합니다. 오류 0건이 전체 계층의 완전한 분석을 의미하지 않습니다.
 
-# 직군별 명세 ZIP 다운로드
-mkdir -p reports
-curl --fail -X POST http://127.0.0.1:8080/api/v1/reports \
-  --output reports/latest.zip
-
-# 통합 XLSX 단독 다운로드
-curl --fail -X POST http://127.0.0.1:8080/api/v1/reports.xlsx \
-  --output reports/latest.xlsx
-```
-
-각 POST는 새 스냅샷을 수집합니다. 동시에 두 분석을 요청하면 뒤 요청은 HTTP 409로 응답합니다. 분석은 동기식이며 대상 수와 조회 실패 시간에 따라 소요 시간이 늘어납니다. 인증 기능은 아직 없으므로 기본 루프백 바인딩으로 사용합니다.
-
-## 일회성 보고서 생성
-
-```bash
-java -jar target/wook-observer-0.2.0.jar \
-  --observer.report-dir=reports/run-001
-```
-
-이 옵션은 HTTP 서버를 띄우지 않고 분석 후 종료합니다. 이미 존재하는 출력 디렉터리는 덮어쓰지 않으므로 실행마다 새 경로를 사용합니다.
-
-```text
-reports/run-001/
-├── summary.md
-├── report.json
-├── report.xlsx
-└── services/
-    ├── application/
-    │   ├── processes.md
-    │   ├── open-source.md
-    │   └── containers.md
-    ├── web/
-    ├── database/
-    ├── cache/
-    ├── messaging/
-    ├── infrastructure/
-    └── other/
-```
-
-일곱 직군마다 동일한 세 명세를 생성합니다. PID, 컨테이너 ID, 라이브러리 경로 및 수집 근거로 명세 사이의 관계를 확인할 수 있습니다. 자동 분류는 실행 파일과 이미지 이름의 휴리스틱입니다.
-
-## 통합 Excel 보고서
-
-폴더 출력과 ZIP에는 기존 Markdown 22개·JSON 1개에 **`report.xlsx`**를 더한 총 24개 파일이 들어갑니다. 같은 스냅샷으로 모든 형식을 만들므로 형식별로 다시 수집하지 않습니다. 단독 XLSX API를 별도로 요청하면 새 스냅샷을 생성합니다.
-
-XLSX는 다음 **30개 시트**를 제공합니다.
-
-| 시트 | 내용 |
-| --- | --- |
-| 요약 | 수집 시각·버전·범위·집계·해석 주의와 내부 이동 링크 |
-| 호스트 | OS·자원·Docker 엔진 등 호스트 정보 |
-| 직군별 현황 | 직군별 프로세스·JVM·라이브러리·컨테이너 수와 명세 링크 |
-| 직군별 명세 21개 | 일곱 직군 각각의 프로세스·오픈소스·컨테이너 명세 |
-| JVM 속성 | PID·직군·컨테이너·조회 상태와 허용된 JVM 속성 |
-| 컨테이너 연결 | PID·포트·네트워크·마운트 목록을 항목별 행으로 표시 |
-| 수집 오류 | 부분 실패·권한 부족·제한·누락 |
-| 원문 목록 | 원본 문서 경로·UTF-8 크기·SHA-256·원문 위치 |
-| Markdown 원문 / JSON 원문 | 기존 MD·JSON의 전체 내용을 번호가 있는 조각으로 보존 |
-
-헤더 고정·열 필터·내부 링크를 사용하여 탐색할 수 있습니다. 원문은 같은 문서의 조각 번호 순으로 구분자 없이 이어 붙이면 복원됩니다. 매우 긴 표의 값은 미리보기로 축약하고 원문에는 전체 값을 보존합니다. 수집 문자열은 수식으로 해석하지 않으며, 15자리를 초과하는 정수는 텍스트로 저장해 정밀도를 유지합니다.
-
-빈 명세는 헤더만 남기며 오류와 수집 한계를 확인해야 합니다. 라이브러리 수는 프로세스별 중복을 포함하고, 발견된 라이브러리의 실제 로딩·오픈소스 여부·라이선스를 확정하지 않습니다.
-
-## 수집 범위와 설정
-
-| 계층 | 0.2.0 수집 내용 |
-| --- | --- |
-| 호스트 | OS·커널·아키텍처·CPU 수·접근 가능한 메모리 |
-| 프로세스 | PID·부모 PID·소유자·시작 시각·누적 CPU·RSS·스레드·실행 파일 |
-| Java | `jcmd VM.system_properties`의 허용된 속성, JVM 버전, 실행 JAR·클래스패스 |
-| 라이브러리 | 일반/묶음 JAR의 Maven 메타데이터, manifest, Spring Boot/WAR 내부 라이브러리 |
-| Docker | 엔진 버전·이미지 태그/ID·상태·포트·네트워크·마운트·호스트 PID |
-
-JVM 조회에는 JDK의 `jcmd`와 대상에 대한 접근 권한이 필요합니다. 컨테이너 내부 Java는 `docker top`의 호스트 PID와 `/proc/<pid>/root`를 연결하여 조사합니다. 대상 컨테이너 안에서 명령을 실행하지 않습니다. Docker CLI와 로컬 Unix 소켓이 없거나 접근할 수 없으면 해당 계층의 제한을 기록합니다.
-
-JDK 최소 버전은 Wook Observer의 빌드·실행 기준입니다. 분석 대상 JVM은 접근 권한과 `jcmd` 호환성 범위에서 조회하며, 실행 파일 이름이 `java` 또는 `java.exe`인 프로세스를 우선 식별합니다.
-
-외부 `application.yml` 예시:
-
-```yaml
-observer:
-  docker-enabled: true
-  docker-socket: /var/run/docker.sock
-  jvm-attach-enabled: true
-  command-timeout: 3s
-  max-processes: 4096
-  max-containers: 256
-  max-java-processes: 64
-  max-jars-per-process: 512
-  service-overrides:
-    "[container:orders]": APPLICATION
-    "[container:kafka]": MESSAGING
-    "[pid:1234]": DATABASE
-```
-
-```bash
-java -jar target/wook-observer-0.2.0.jar \
-  --spring.config.additional-location=file:/path/to/application.yml
-
-# 대상 JVM에 attach하지 않고 접근 가능한 파일 메타데이터만 조사
-java -jar target/wook-observer-0.2.0.jar \
-  --observer.report-dir=reports/passive-001 \
-  --observer.jvm-attach-enabled=false
-```
-
-사용자 지정 직군은 `APPLICATION`, `WEB`, `DATABASE`, `CACHE`, `MESSAGING`, `INFRASTRUCTURE`, `OTHER`입니다. 컨테이너 이름은 앞의 `/` 없이 입력합니다. PID 설정이 컨테이너 분류보다 우선하며 PID는 재사용될 수 있으므로 고정 서비스에는 컨테이너 이름 설정을 권장합니다.
-
-루트리스 Docker는 해당 사용자의 소켓 경로를 지정합니다. `DOCKER_HOST`와 원격 Docker 컨텍스트는 사용하지 않습니다. 수집기를 컨테이너 안에서 실행하면 호스트 PID 오연결을 피하기 위해 Docker PID 연결을 생략하며 호스트 전체를 관측했다고 표시하지 않습니다.
-
-## 현재 한계
-
-- 라이브러리의 존재와 실제 클래스 로딩은 다릅니다. 동적 클래스 로더, Java agent, 삭제된 JAR는 완전히 탐색하지 않습니다.
-- 이름에서 추정한 버전은 명시하며 오픈소스 여부·라이선스·취약점은 아직 판정하지 않습니다. 비 Java 런타임과 OS 패키지 상세 수집은 후속 범위입니다.
-- 호스트 리스닝 포트, systemd, 서비스 호출 관계, 원격 서버, Kubernetes/containerd 직접 연동은 후속 범위입니다.
-- 권한 부족, attach 차단, 종료된 프로세스, 수집량 제한을 `summary.md`와 JSON의 `issues`에 남깁니다.
-- 외부 명령 출력은 1 MiB, 중첩 JAR는 16 MiB, 메타데이터는 64 KiB로 제한합니다. JVM 변경·힙 덤프·강제 GC·에이전트 주입은 수행하지 않습니다.
-- 환경변수 값, 전체 명령행, 임의 JVM 속성은 보고서에 포함하지 않습니다. 보고서에는 호스트·프로세스·경로 정보가 있으므로 `reports/`도 Git에서 제외합니다.
-
-## 개발 및 테스트
-
-```bash
-./mvnw spring-boot:run  # 로컬 HTTP 서비스
-./mvnw test            # JUnit 단위·HTTP 통합 테스트
-./mvnw verify          # 버전 검사, 테스트, 실행 JAR 패키징
-git diff --check       # 변경 파일 공백 점검
-```
-
-Java 코드는 `src/main/java/com/wook/observer/`, 테스트는 같은 패키지 구조의 `src/test/java/`에 둡니다. 테스트 파일은 `*Test.java`를 사용합니다. Docker 데이터와 JAR 메타데이터는 고정 fixture로 검증하며 테스트가 운영 컨테이너를 변경하지 않습니다.
-
-Excel 보고서는 Apache POI로 생성합니다. 테스트에서 파일을 다시 열어 집계·직군 분리·원문 일치·긴 Unicode·숫자 정밀도·수식 해석 방지·API 및 ZIP 제공을 확인합니다.
-
-기술 근거: [Spring Boot 요구사항](https://docs.spring.io/spring-boot/system-requirements.html), [JDK 21 jcmd](https://docs.oracle.com/en/java/javase/21/docs/specs/man/jcmd.html), [Docker inspect](https://docs.docker.com/reference/cli/docker/container/inspect/), [Docker top](https://docs.docker.com/reference/cli/docker/container/top/), [Apache POI XLSX 가이드](https://poi.apache.org/components/spreadsheet/quick-guide.html).
+규칙·요구사항·검증 이력은 [rules/rules.md](rules/rules.md), [rules/requirements.md](rules/requirements.md), [rules/versions.md](rules/versions.md)에서 관리합니다. 루트 `resources/`는 공유용이며 커밋하지 않습니다. 기존 `AGENTS.md`는 보존합니다. 실제 비밀번호·SSH 키·반입 데이터·보고서도 Git에서 제외합니다.

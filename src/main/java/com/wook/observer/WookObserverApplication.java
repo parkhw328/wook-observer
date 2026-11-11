@@ -15,6 +15,7 @@ public class WookObserverApplication {
         SpringApplication application = new SpringApplication(WookObserverApplication.class);
         if (Arrays.stream(args).anyMatch(arg -> arg.startsWith("--observer.report-dir="))) {
             application.setWebApplicationType(WebApplicationType.NONE);
+            application.setAdditionalProfiles("collector");
         }
         application.run(args);
     }

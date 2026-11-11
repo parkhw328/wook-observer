@@ -5,7 +5,16 @@ import java.util.List;
 import java.util.Map;
 
 public record Observation(String version, Instant collectedAt, Host host, List<ProcessInfo> processes,
-                          List<JavaInfo> javaProcesses, List<ContainerInfo> containers, List<Issue> issues) {
+                          List<JavaInfo> javaProcesses, List<ContainerInfo> containers, List<Issue> issues,
+                          Map<String, String> facts, Assessment assessment) {
+    public Observation(String version, Instant collectedAt, Host host, List<ProcessInfo> processes,
+                       List<JavaInfo> javaProcesses, List<ContainerInfo> containers, List<Issue> issues) {
+        this(version, collectedAt, host, processes, javaProcesses, containers, issues, Map.of(), null);
+    }
+
+    public Observation assessed(Assessment result) {
+        return new Observation(version, collectedAt, host, processes, javaProcesses, containers, issues, facts, result);
+    }
     public record Host(String name, String os, String osVersion, String architecture, int processors,
                        long physicalMemoryBytes, String scope, String dockerVersion) { }
 

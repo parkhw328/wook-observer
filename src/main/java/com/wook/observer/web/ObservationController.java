@@ -16,6 +16,7 @@ import java.io.IOException;
 import java.util.Map;
 
 @RestController
+@org.springframework.context.annotation.Profile("collector")
 @RequestMapping("/api/v1")
 public class ObservationController {
     private final ObservationService observations;

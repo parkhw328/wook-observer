@@ -22,6 +22,7 @@ import static org.mockito.Mockito.when;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = "spring.config.import=classpath:service-overrides.yml")
+@org.springframework.test.context.ActiveProfiles("collector")
 class ObservationControllerTest {
     @Value("${local.server.port}") int port;
     @MockitoBean ObservationService observations;

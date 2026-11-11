@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>로그인 · Wook Observer</title>
+    <link rel="stylesheet" href="/app.css" />
+    <script defer src="/login.js"></script>
+  </head>
+  <body class="login-body">
+    <main class="login-layout">
+      <section class="login-intro">
+        <a class="brand" href="/"
+          ><span class="brand-icon">W</span> wook<span>observer</span></a
+        >
+        <div>
+          <p class="eyebrow">SERVICE VISIBILITY, ON YOUR NETWORK</p>
+          <h1>서비스의 모든 계층을,<br />한곳에서 살펴보세요.</h1>
+          <p>
+            서버와 컨테이너의 실행 환경을 기록하고,<br />내부 취약점 데이터로
+            점검 결과를 확인합니다.
+          </p>
+          <div class="layers">
+            <span>HOST</span><i>↓</i><span>PROCESS · JVM</span><i>↓</i
+            ><span>LIBRARY · CONTAINER</span>
+          </div>
+        </div>
+        <p class="muted">내부망 운영을 위한 서비스 점검 플랫폼</p>
+      </section>
+      <section class="login-panel">
+        <form id="login-form">
+          <p class="eyebrow">WOOK OBSERVER / 1.0.0</p>
+          <h2>워크스페이스 로그인</h2>
+          <p class="muted">관리자가 발급한 계정으로 시작하세요.</p>
+          <label
+            >아이디<input
+              name="username"
+              autocomplete="username"
+              required
+              autofocus
+              maxlength="64" /></label
+          ><label
+            >비밀번호<input
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              required
+          /></label>
+          <p id="login-error" class="error" role="alert"></p>
+          <button class="primary full" type="submit">
+            로그인 <span>→</span>
+          </button>
+          <p class="small muted">
+            접근 권한이 필요하면 내부 관리자에게 문의하세요.
+          </p>
+        </form>
+      </section>
+    </main>
+  </body>
+</html>

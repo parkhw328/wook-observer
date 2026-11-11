@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Wook Observer · 서비스 점검</title>
+    <link rel="stylesheet" href="/app.css" />
+    <script defer src="/app.js"></script>
+  </head>
+  <body>
+    <div class="app-layout">
+      <aside class="sidebar">
+        <a class="brand" href="#overview"
+          ><span class="brand-icon">W</span
+          ><span>wook<strong>observer</strong></span></a
+        >
+        <p class="nav-label">WORKSPACE</p>
+        <nav aria-label="주 메뉴">
+          <a href="#overview" data-view="overview"><span>◫</span>대시보드</a
+          ><a href="#targets" data-view="targets"><span>▤</span>점검 대상</a
+          ><a href="#jobs" data-view="jobs"><span>◷</span>점검 이력</a
+          ><a href="#catalog" data-view="catalog"
+            ><span>◇</span>취약점 데이터</a
+          >
+          <p class="nav-label admin-only">ADMINISTRATION</p>
+          <a href="#updates" data-view="updates" class="admin-only"
+            ><span>↻</span>데이터 업데이트</a
+          ><a href="#users" data-view="users" class="admin-only"
+            ><span>♧</span>사용자 관리</a
+          >
+        </nav>
+        <div class="sidebar-bottom">
+          <span class="dot"></span> 내부망 점검 플랫폼
+          <p>Wook Observer <b>1.0.0</b></p>
+        </div>
+      </aside>
+      <div class="main-shell">
+        <header class="topbar">
+          <span id="breadcrumb">워크스페이스 / 대시보드</span>
+          <div>
+            <span id="account"></span
+            ><button id="logout" class="quiet">로그아웃</button>
+          </div>
+        </header>
+        <main id="content" tabindex="-1">
+          <p>워크스페이스를 불러오는 중입니다…</p>
+        </main>
+        <footer>
+          Wook Observer · 수집 범위와 판정 근거를 함께 기록합니다.
+        </footer>
+      </div>
+    </div>
+    <div id="toast" role="status" aria-live="polite" hidden></div>
+    <dialog id="modal">
+      <div id="modal-content"></div>
+      <button id="modal-close" class="quiet">닫기</button>
+    </dialog>
+  </body>
+</html>

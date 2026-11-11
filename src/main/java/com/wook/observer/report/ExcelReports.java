@@ -1,6 +1,7 @@
 package com.wook.observer.report;
 
 import com.wook.observer.model.Observation;
+import com.wook.observer.model.Assessment;
 import com.wook.observer.model.ServiceCategory;
 import org.apache.poi.common.usermodel.HyperlinkType;
 import org.apache.poi.ss.usermodel.Cell;
@@ -63,9 +64,19 @@ public class ExcelReports {
             summary.add("컨테이너 연결 프로세스 수", report.processes().stream().filter(process -> !process.containerId().isBlank()).count());
             summary.add("라이브러리 항목 수(프로세스별 중복 포함)", report.javaProcesses().stream().mapToLong(java -> java.libraries().size()).sum());
             summary.add("수집 오류 수", report.issues().size());
+            if (report.assessment() != null) {
+                summary.add("취약점 데이터 버전", report.assessment().catalogRevision());
+                summary.add("취약점 데이터 반영 시각", report.assessment().catalogUpdatedAt());
+                summary.add("취약점 판정 범위", report.assessment().scope());
+                Table findings = table(workbook, styles, tables, "취약점 상세", "발견은 기준과의 일치이며 악용 가능성을 확정하지 않습니다. 점검 불가를 안전으로 해석하지 마세요.",
+                        "종류", "ID", "대상", "취약점발견", "심각도", "제목", "근거", "참조");
+                report.assessment().findings().forEach(f -> findings.add(f.kind(), f.id(), f.asset(), f.status(), f.severity(), f.title(), f.evidence(), f.reference()));
+                Row link = summary.add("취약점 상세", "시트 열기");
+                summary.link(link.getCell(1), findings.name(), 0);
+            }
             summary.add("원문 문서 수", documents.size());
             summary.add("해석 주의", "라이브러리 발견은 실제 로딩이나 오픈소스 여부·라이선스 확인을 의미하지 않습니다. Java 수에는 수집기 자체가 포함될 수 있습니다.");
-            summary.add("관측 한계", "비 Java 패키지 상세, 동적 클래스 로더, systemd, 호스트 리스닝 포트, 원격/Kubernetes 계층은 미지원입니다. 수집 오류 0건이 전체 계층의 완전한 분석을 의미하지 않습니다.");
+            summary.add("관측 한계", "비 Java 패키지 상세, 동적 클래스 로더, systemd, 호스트 리스닝 포트, Kubernetes 계층은 미지원입니다. SSH와 로컬 수집의 도구·권한 차이는 수집 오류를 확인하세요.");
             summary.add("분류 기준", "실행 파일·이미지 이름 휴리스틱 및 사용자 설정. 기타 직군은 자동 분류 미확정 항목을 포함합니다.");
             summary.add("숫자와 긴 값", "컨테이너 ID·15자리 초과 정수는 텍스트로 보존합니다. " + LONG_VALUE_NOTE);
 
@@ -95,11 +106,11 @@ public class ExcelReports {
             Map<ServiceCategory, Table> containerSheets = new EnumMap<>(ServiceCategory.class);
             for (ServiceCategory category : ServiceCategory.values()) {
                 Table processes = table(workbook, styles, tables, category.label() + "_프로세스", "CPU는 시작 후 누적 시간이며 시간은 UTC입니다. " + LONG_VALUE_NOTE,
-                        "PID", "PPID", "프로세스명", "실행 파일", "소유자", "시작 시각(UTC)", "누적 CPU(ms)", "RSS(bytes)", "스레드 수", "컨테이너 ID", "분류 근거");
+                        "PID", "PPID", "프로세스명", "실행 파일", "소유자", "시작 시각(UTC)", "누적 CPU(ms)", "RSS(bytes)", "스레드 수", "컨테이너 ID", "분류 근거", "취약점발견");
                 Table libraries = table(workbook, styles, tables, category.label() + "_오픈소스", "Java 라이브러리 후보입니다. 실제 로딩·라이선스·오픈소스 여부는 별도 확인이 필요합니다.",
-                        "PID", "이름", "버전", "경로", "버전 근거", "라이선스", "로딩 상태");
+                        "PID", "이름", "버전", "경로", "버전 근거", "라이선스", "로딩 상태", "취약점발견");
                 Table containers = table(workbook, styles, tables, category.label() + "_컨테이너", "태그와 실제 이미지 ID를 구분합니다. 연결 상세에서 전체 목록을 확인하세요.",
-                        "컨테이너 ID", "이름", "이미지", "이미지 ID", "상태", "호스트 init PID", "프로세스 수", "포트 수", "네트워크 수", "마운트 수", "분류 근거", "연결 상세");
+                        "컨테이너 ID", "이름", "이미지", "이미지 ID", "상태", "호스트 init PID", "프로세스 수", "포트 수", "네트워크 수", "마운트 수", "분류 근거", "연결 상세", "취약점발견");
                 processSheets.put(category, processes);
                 librarySheets.put(category, libraries);
                 containerSheets.put(category, containers);
@@ -117,7 +128,7 @@ public class ExcelReports {
             for (var process : report.processes()) {
                 processSheets.get(process.category()).add(process.pid(), process.parentPid(), process.name(), process.executable(),
                         process.user(), process.startedAt(), process.cpuMillis(), process.residentBytes(), process.threads(),
-                        process.containerId(), process.classificationEvidence());
+                        process.containerId(), process.classificationEvidence(), report.assessment() == null ? "미실시" : report.assessment().processStatus(process.pid()));
             }
             for (var java : report.javaProcesses()) {
                 ServiceCategory category = categoryOf(byPid, java.pid());
@@ -129,7 +140,8 @@ public class ExcelReports {
                             jvms.add(category.label(), java.pid(), container, java.status(), entry.getKey(), entry.getValue()));
                 }
                 java.libraries().forEach(library -> librarySheets.get(category).add(java.pid(), library.name(), library.version(),
-                        library.path(), library.evidence(), library.license(), library.loadingStatus()));
+                        library.path(), library.evidence(), library.license(), library.loadingStatus(),
+                        report.assessment() == null ? "미실시" : report.assessment().status(Assessment.libraryAsset(java.pid(), library))));
             }
             for (var container : report.containers()) {
                 int firstDetailRow = connections.nextRow;
@@ -140,7 +152,8 @@ public class ExcelReports {
                 Table table = containerSheets.get(container.category());
                 Row row = table.add(container.id(), container.name(), container.image(), container.imageId(), container.state(),
                         container.initPid(), container.processIds().size(), container.ports().size(), container.networks().size(),
-                        container.mounts().size(), container.classificationEvidence(), firstDetailRow == connections.nextRow ? "수집된 연결 없음" : "열기");
+                        container.mounts().size(), container.classificationEvidence(), firstDetailRow == connections.nextRow ? "수집된 연결 없음" : "열기",
+                        report.assessment() == null ? "미실시" : report.assessment().status("container:" + container.id()));
                 if (firstDetailRow != connections.nextRow) { table.link(row.getCell(11), connections.name(), firstDetailRow); }
             }
 
