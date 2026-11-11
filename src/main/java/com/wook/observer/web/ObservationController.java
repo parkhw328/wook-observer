@@ -36,6 +36,15 @@ public class ObservationController {
                 .body(reports.zip(observations.collect()));
     }
 
+    @PostMapping(value = "/reports.xlsx", produces = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    public ResponseEntity<byte[]> spreadsheet() throws IOException {
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"wook-observer-report.xlsx\"")
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(reports.xlsx(observations.collect()));
+    }
+
     @ExceptionHandler(ObservationService.ScanInProgressException.class)
     public ResponseEntity<Map<String, String>> scanInProgress(ObservationService.ScanInProgressException exception) {
         return ResponseEntity.status(HttpStatus.CONFLICT).contentType(MediaType.APPLICATION_JSON)

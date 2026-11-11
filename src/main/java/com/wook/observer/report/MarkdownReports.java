@@ -53,7 +53,8 @@ public class MarkdownReports {
             out.append("| 계층 | 대상 | 내용 |\n| --- | --- | --- |\n");
             report.issues().forEach(issue -> row(out, issue.layer(), issue.target(), issue.message()));
         }
-        out.append("\n전체 구조화 결과: [report.json](report.json)\n");
+        out.append("\n전체 구조화 결과: [report.json](report.json)\n")
+                .append("\n통합 Excel 보고서: [report.xlsx](report.xlsx)\n");
         return out.toString();
     }
 

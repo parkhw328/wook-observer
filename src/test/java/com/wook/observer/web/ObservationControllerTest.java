@@ -4,6 +4,7 @@ import com.wook.observer.ReportFixtures;
 import com.wook.observer.collector.ObservationService;
 import com.wook.observer.config.ObserverProperties;
 import com.wook.observer.model.ServiceCategory;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -11,6 +12,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import java.net.URI;
+import java.io.ByteArrayInputStream;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -53,9 +55,25 @@ class ObservationControllerTest {
     }
 
     @Test
+    void downloadsAStandaloneExcelWorkbook() throws Exception {
+        when(observations.collect()).thenReturn(ReportFixtures.sample());
+        var response = http.send(post("/api/v1/reports.xlsx"), HttpResponse.BodyHandlers.ofByteArray());
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(response.headers().firstValue("Content-Type"))
+                .contains("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        assertThat(response.headers().firstValue("Content-Disposition").orElseThrow()).contains("wook-observer-report.xlsx");
+        assertThat(response.headers().firstValue("Cache-Control")).contains("no-store");
+        try (var workbook = new XSSFWorkbook(new ByteArrayInputStream(response.body()))) {
+            assertThat(workbook.getNumberOfSheets()).isEqualTo(30);
+            assertThat(workbook.getSheet("JSON 원문")).isNotNull();
+        }
+    }
+
+    @Test
     void concurrentScanReturnsConflict() throws Exception {
         when(observations.collect()).thenThrow(new ObservationService.ScanInProgressException());
         assertThat(http.send(post("/api/v1/observations"), HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(409);
+        assertThat(http.send(post("/api/v1/reports.xlsx"), HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(409);
     }
 
     private HttpRequest post(String path) { return HttpRequest.newBuilder(uri(path)).POST(HttpRequest.BodyPublishers.noBody()).build(); }

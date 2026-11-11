@@ -11,12 +11,13 @@
     </parent>
     <groupId>com.wook</groupId>
     <artifactId>wook-observer</artifactId>
-    <version>0.1.0</version>
+    <version>0.2.0</version>
     <name>wook-observer</name>
     <description>Layered runtime inventory and service specifications</description>
     <properties>
         <java.version>21</java.version>
         <maven.compiler.release>21</maven.compiler.release>
+        <poi.version>6.0.0</poi.version>
     </properties>
     <dependencies>
         <dependency>
@@ -30,6 +31,23 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>${poi.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.poi</groupId>
+                    <artifactId>poi-ooxml-lite</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!-- Named Excel styles require schema types omitted from poi-ooxml-lite. -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml-full</artifactId>
+            <version>${poi.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

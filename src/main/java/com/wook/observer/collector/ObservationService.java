@@ -36,7 +36,7 @@ public class ObservationService {
             Instant collectedAt = Instant.now();
             List<Issue> issues = new ArrayList<>();
             if (!System.getProperty("os.name").equalsIgnoreCase("Linux")) {
-                issues.add(new Issue("host", "platform", "0.1.0은 Linux 우선 지원: /proc 기반 상세 수집 미지원"));
+                issues.add(new Issue("host", "platform", "현재 버전은 Linux 우선 지원: /proc 기반 상세 수집 미지원"));
             }
             DockerCollector.Result containerResult;
             try {
