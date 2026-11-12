@@ -22,6 +22,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyMap;
@@ -137,7 +138,7 @@ class PlatformIntegrationTest {
             assertThat(downloaded.headers().firstValue("Cache-Control")).contains("no-store");
             if (format.equals("xlsx")) {
                 try (var workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook(new java.io.ByteArrayInputStream(downloaded.body()))) {
-                    assertThat(workbook.getNumberOfSheets()).isEqualTo(34);
+                    assertThat(workbook.getNumberOfSheets()).isEqualTo(35);
                     assertThat(workbook.getSheet("취약점 상세")).isNotNull();
                     assertThat(workbook.getSheet("애플리케이션_오픈소스").getRow(2).getCell(2).getStringCellValue()).isEqualTo("취약점발견");
                 }
@@ -226,6 +227,30 @@ class PlatformIntegrationTest {
         assertThat(catalog.page("nonexistent-page-record", 0).hasNext()).isFalse();
         assertThat(client.get("/api/catalog/page?page=-1").statusCode()).isEqualTo(400);
         assertThat(json.readTree(client.get("/api/catalog?query=PAGE-test-&page=1").body()).isArray()).isTrue();
+    }
+
+    @Test
+    void streamsTargetCatalogWithoutChangingOriginalDocumentsOrAssessment() throws Exception {
+        byte[] originals = getClass().getResourceAsStream("/catalog/rpm-advisories.json").readAllBytes();
+        catalog.importBytes(originals, "rpm-selection-test");
+        var base = com.wook.observer.ReportFixtures.sample();
+        var rpm = new com.wook.observer.model.SystemInventory.RpmPackage("openssl-libs", "1", "3.0.1", "42.el9_0", "x86_64",
+                "openssl-3.0.1-42.el9_0.src.rpm", "", "Rocky Enterprise Software Foundation");
+        var inventory = new com.wook.observer.model.SystemInventory(List.of(),
+                new com.wook.observer.model.SystemInventory.RpmInventory(com.wook.observer.model.SystemInventory.Status.COLLECTED, "", List.of(rpm)));
+        var report = new com.wook.observer.model.Observation(base.version(), base.collectedAt(), base.host(), base.processes(), base.javaProcesses(),
+                base.containers(), base.issues(), Map.of("host:os.id", "rocky", "host:os.version", "9.0"), null, inventory);
+        var full = catalog.snapshot();
+        var selected = catalog.snapshot(report);
+        assertThat(selected.revision()).isEqualTo(full.revision());
+        assertThat(selected.records()).noneMatch(r -> r.path("id").asText().startsWith("RHSA-"));
+        assertThat(selected.records()).anyMatch(r -> r.path("id").asText().equals("RLSA-2022:7288"));
+        var assessor = new Assessor(null);
+        var expected = assessor.assess(report, full).assessment();
+        var actual = assessor.assess(report, selected).assessment();
+        assertThat(actual.findings()).containsExactlyInAnyOrderElementsOf(expected.findings());
+        assertThat(actual.coverage()).containsExactlyInAnyOrderElementsOf(expected.coverage());
+        assertThat(catalog.snapshot().records()).containsAll(json.readTree(originals).valueStream().toList());
     }
 
     @Test

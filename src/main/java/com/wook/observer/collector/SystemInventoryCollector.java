@@ -28,7 +28,7 @@ public class SystemInventoryCollector {
             if (!System.getProperty("os.name").equalsIgnoreCase("Linux")) {
                 throw new IOException("Unsupported OS");
             }
-            var result = commands.run(List.of("sh", "-s"), script(), Duration.ofSeconds(30), 5 * 1024 * 1024);
+            var result = commands.run(List.of("sh", "-s"), script(), Duration.ofSeconds(45), 5 * 1024 * 1024);
             if (!result.success()) {
                 issues.add(new Issue("os", "local inventory", result.failure()));
                 return failed();
@@ -42,6 +42,7 @@ public class SystemInventoryCollector {
     }
 
     private SystemInventory failed() {
-        return new SystemInventory(List.of(), new SystemInventory.RpmInventory(Status.FAILED, "OS 수집기 실행 실패", List.of()));
+        return new SystemInventory(List.of(), new SystemInventory.RpmInventory(Status.FAILED, "OS 수집기 실행 실패", List.of()),
+                new SystemInventory.SocketInventory(Status.FAILED, "OS 수집기 실행 실패로 열린 포트를 확인하지 못했습니다.", List.of()));
     }
 }

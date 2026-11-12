@@ -2,7 +2,7 @@
 
 서버의 **실행 프로세스 → JVM·라이브러리 → Docker 컨테이너**를 조사하고 서비스 직군별 명세와 취약점 대조 결과를 제공하는 내부망 웹서비스입니다.
 
-현재 버전은 **1.4.0**입니다. 중앙 서비스는 Spring Boot 4.1.2 / Java 21.0.13 이상 / PostgreSQL 18로 구성하고 Docker Compose로 실행합니다. 대상 Linux 서버는 SSH로 연결하므로 **Java를 새로 설치할 필요가 없습니다.**
+현재 버전은 **1.5.0**입니다. 중앙 서비스는 Spring Boot 4.1.2 / Java 21.0.13 이상 / PostgreSQL 18로 구성하고 Docker Compose로 실행합니다. 대상 Linux 서버는 SSH로 연결하므로 **Java를 새로 설치할 필요가 없습니다.**
 
 ## Docker로 시작하기
 
@@ -41,7 +41,8 @@ docker compose ps
 | --- | --- |
 | OS·프로세스 | Linux, SSH, POSIX 셸, `ps` 및 기본 명령. Java 불필요. 접근 가능한 PID 범위만 조사 |
 | OS·커널 상세 | `uname -a/-r/-v/-m`, `/etc/os-release`, `/etc/redhat-release`, `/proc/version`. `base64`로 전송하며 항목당 16 KiB 제한 |
-| 설치 RPM | `rpm`, `timeout`, RPM DB 읽기 권한. 이름·Epoch·버전·Release·아키텍처, 20초·20,000건·4 MiB 제한 |
+| 설치 RPM | `rpm`, `timeout`, RPM DB 읽기 권한. 이름·Epoch·버전·Release·아키텍처·소스 RPM·모듈·공급자, 20초·20,000건·4 MiB 제한 |
+| 열린 포트 | `ss`, `timeout`. TCP 리스닝·UDP 바인딩, IPv4/IPv6 주소·포트·상태·확인 가능한 PID/프로세스. 프로토콜별 5초·합계 4,096개·512 KiB 제한 |
 | Docker | Docker CLI, `timeout`, 로컬 소켓 조회 권한. 컨테이너 정보와 `docker top` PID 연결 |
 | JVM 속성 | 실행 중인 Java 서비스, 사용할 수 있는 `jcmd`, `timeout`, attach 권한 |
 | Java 라이브러리 | Python 3와 `/proc`·JAR 읽기 권한. 실행 JAR, 클래스패스, 열린 JAR, Spring Boot/WAR 중첩 JAR의 메타데이터 |
@@ -61,7 +62,7 @@ Python 3나 `jcmd`가 없어도 기본 점검은 수행하고 상세 미수집 �
 - **취약점 데이터**: DB에 저장한 CVE/OSV, CCE, 내부 설정 규칙 검색.
 - **데이터 업데이트**: OSV JSON/ZIP 또는 자체 묶음 파일 업로드, 반입 폴더/내부 미러 원본 설정, 즉시 갱신, 6필드 cron 예약, 결과 이력.
 - 기본 목록은 **CVE 2건·RHEL CCE 2건·Docker 정책 1건**입니다. 전체 취약점 DB가 아니며 운영 범위의 최신 데이터를 별도로 반입해야 합니다.
-- 정확한 Maven 좌표와 버전을 OSV 영향 범위와 비교합니다. CCE는 식별자 목록만으로 판정하지 않고 **적용 OS·실제 설정·기대값**이 있는 규칙만 점검합니다. 내부 Docker 규칙은 CCE와 구분합니다.
+- 정확한 Maven 좌표와 버전을 OSV 영향 범위와 비교합니다. **RHEL·Rocky·AlmaLinux 8/9/10의 설치 RPM**은 해당 배포판의 RHSA·RLSA/RXSA·ALSA 보안 권고에 RPM EVR로 대조합니다. 소스 RPM 대응만 가능한 항목은 의심이며, 모듈·공급자·RHEL 제품 스트림이 미확인인 경우 미판정입니다. CCE는 식별자 목록만으로 판정하지 않고 **적용 OS·실제 설정·기대값**이 있는 규칙만 점검합니다. 내부 Docker 규칙은 CCE와 구분합니다.
 - 조치 목록에는 `발견`·`의심`만 표시합니다. CCE 플랫폼 불일치는 비대상, 데이터·설정·식별 정보 부족은 미판정으로 따로 집계합니다. 버전 일치는 악용 가능성을 확정하지 않으며 미판정은 안전 판정이 아닙니다.
 - Maven 메타데이터가 없는 JAR도 정확한 파일명 artifactId·버전으로 내부 카탈로그에서 유일한 후보를 찾으면 `의심`으로 표시합니다. 여러 groupId 후보나 버전 불일치는 미판정입니다.
 
@@ -69,15 +70,30 @@ Python 3나 `jcmd`가 없어도 기본 점검은 수행하고 상세 미수집 �
 
 인터넷이 가능한 준비 PC에서 `python3 scripts/prepare-maven-catalog.py`를 실행하면 공식 OSV Maven 전체 덤프를 `updates/maven-osv.zip`에 받고 크기·ZIP CRC·SHA-256을 확인합니다. 이 ZIP을 폐쇄망으로 반입해 관리자 화면에서 업로드하거나 업데이트 원본을 `maven-osv.zip`으로 저장한 뒤 갱신하세요. 다운로드 스크립트는 서비스 실행 중 자동 호출되지 않습니다.
 
+2026-11-12 확장 반입본은 **Maven 7,257건 + RPM 보안 권고 22,633건**입니다. RHEL 12,646건·Rocky 4,769건·AlmaLinux 5,218건과 기존 CCE 2건·정책 1건을 합쳐 기본 DB의 최종 목록은 **29,893건**입니다. 권고 수이며 고유 CVE 수와는 다릅니다.
+
+**RPM 대조·포트 수집은 앱 1.5.0 이상과 새 점검이 필요합니다.** 기존 설치는 아래 폐쇄망 업그레이드 절차로 앱을 교체하고, 데이터 전달 ZIP을 풀어 `import/maven-osv.zip`과 `import/rpm-*.zip` 5개를 각각 업로드하세요. 같은 내용의 Maven JSON은 대안이며 ZIP과 중복 반영할 필요가 없습니다. 바깥 전달 ZIP·manifest는 업로드 대상이 아닙니다.
+
+외부 준비 PC(Python 3.11 이상)에서 OS/RPM 자료를 다시 준비하려면 아래를 실행합니다. 원본을 수정하지 않고 8/9/10 관련 보안 권고와 철회를 선별하고, Red Hat 데이터는 업로드·메모리 부담을 줄이도록 분할합니다.
+
+```bash
+python3 scripts/prepare-rpm-catalog.py
+# 검증된 캐시를 재사용할 때
+python3 scripts/prepare-rpm-catalog.py --use-cache
+# Maven/RPM·JSON 대안·출처·라이선스를 데이터 전용 ZIP으로 포장
+python3 scripts/package-catalog.py
+```
+
+
 ## 보고서
 
 동일 스냅샷을 DB에 저장하며 다시 다운로드해도 서버를 재점검하지 않습니다.
 
 - 첫 화면과 `summary.md`는 대상·수집 시각·중복 제거한 조치 수·명세 링크를 제공합니다. `actions.md`는 발견·의심의 ID, 패키지·설치 버전, 영향 위치, 근거·조치를 담습니다.
 - `coverage.md`는 비대상·미판정·미발견을 이유별로 요약합니다. 같은 CVE/패키지/버전/직군의 반복 결과와 라이브러리를 묶고 PID·컨테이너·경로로 추적합니다.
-- `report.xlsx`는 요약 → 취약점 상세 → 점검 범위 순서입니다. 웹 34개 시트 중 빈 명세·MD/JSON 원문은 기본 숨김이며 Excel의 시트 탭 우클릭 → 숨기기 취소로 열 수 있습니다. 원문은 분할 보존하며 수식으로 실행하지 않습니다.
-- `report.json`, `host/{os,rpm-packages}.md`, `services/<직군>/{processes,open-source,containers}.md`를 유지합니다. 직군은 애플리케이션·웹·DB·캐시·메시징·인프라·기타입니다. ZIP은 총 28개 파일입니다.
-- RPM은 호스트 설치 목록이며 CVE 대조는 미지원입니다. 반복 미판정 행 대신 명세 상단에 범위를 안내합니다. 도구 없음·실패·시간/수집량 제한을 구분합니다.
+- `report.xlsx`는 요약 → 취약점 상세 → 점검 범위 순서입니다. 웹 35개 시트 중 빈 명세·MD/JSON 원문은 기본 숨김이며 Excel의 시트 탭 우클릭 → 숨기기 취소로 열 수 있습니다. 원문은 분할 보존하며 수식으로 실행하지 않습니다.
+- `report.json`, `host/{os,rpm-packages,listening-ports}.md`, `services/<직군>/{processes,open-source,containers}.md`를 유지합니다. 직군은 애플리케이션·웹·DB·캐시·메시징·인프라·기타입니다. ZIP은 총 29개 파일입니다.
+- RPM 명세에는 설치 EVR과 판정, 조치에는 공식 권고·관련 CVE·수정 EVR을 표시합니다. 열린 포트 명세는 현재 네트워크 네임스페이스의 소켓 목록입니다. 방화벽 통과·외부 도달 가능성을 의미하지 않으며 PID는 권한에 따라 미확인일 수 있습니다. 도구 없음·실패·시간/수집량 제한을 구분합니다.
 
 판정 예시, 집계 기준과 이전 보고서 취급은 [운영자 보고서 안내](docs/operator-report.md)를 확인하세요.
 
@@ -90,10 +106,10 @@ Python 3나 `jcmd`가 없어도 기본 점검은 수행하고 상세 미수집 �
 # SSH의 선택적 Python JAR 수집기 회귀 검사 (개발 PC)
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s src/test/python
 # DB 없이 로컬 서버를 한 번 점검하고 종료
-java -jar target/wook-observer-1.4.0.jar --observer.report-dir=./reports/check-001
+java -jar target/wook-observer-1.5.0.jar --observer.report-dir=./reports/check-001
 ```
 
-일회성 CLI는 기존 로컬 수집기를 유지하며 취약점 DB 대조를 수행하지 않습니다(`미실시`). CLI XLSX는 33개 시트입니다. 출력 디렉터리는 새 경로여야 합니다.
+일회성 CLI는 기존 로컬 수집기를 유지하며 취약점 DB 대조를 수행하지 않습니다(`미실시`). CLI XLSX는 34개 시트입니다. 출력 디렉터리는 새 경로여야 합니다.
 
 기존 로컬 HTTP API가 꼭 필요한 경우 `--spring.profiles.active=collector`로 실행합니다. 이 모드는 인증 없이 **loopback 전용**으로 운영하며 `POST /api/v1/observations`, `/api/v1/reports`, `/api/v1/reports.xlsx`를 제공합니다. 중앙 웹서비스에서는 이 API를 제공하지 않습니다.
 
@@ -101,27 +117,27 @@ java -jar target/wook-observer-1.4.0.jar --observer.report-dir=./reports/check-0
 
 ## 폐쇄망 배포와 백업
 
-**Linux x86_64(amd64), Docker Engine·Compose 설치 완료** 환경용 반입 묶음을 제공합니다. 앱·PostgreSQL 이미지 전체, Maven 취약점 ZIP, CCE/정책 JSON, 설정·운영 스크립트, SHA-256과 소스 스냅샷을 포함합니다. 반입 서버에는 Java·Maven·Python·OpenSSL을 설치할 필요가 없습니다. 실행 절차는 묶음의 `README.md`를 따르며 원본은 [폐쇄망 설치 안내](deployment/offline/README.md)입니다.
+**Linux x86_64(amd64), Docker Engine·Compose 설치 완료** 환경용 반입 묶음을 제공합니다. 앱·PostgreSQL 이미지 전체, Maven·RPM 취약점 ZIP, CCE/정책 JSON, 설정·운영 스크립트, SHA-256과 소스 스냅샷을 포함합니다. 반입 서버에는 Java·Maven·Python·OpenSSL을 설치할 필요가 없습니다. 실행 절차는 묶음의 `README.md`를 따르며 원본은 [폐쇄망 설치 안내](deployment/offline/README.md)입니다.
 
 ```bash
 # 반입 서버: 함께 제공한 두 파일의 이름을 사용
-sha256sum -c wook-observer-1.4.0-linux-amd64-YYYYMMDD.tar.gz.sha256
-tar -xzf wook-observer-1.4.0-linux-amd64-YYYYMMDD.tar.gz
-cd wook-observer-1.4.0-linux-amd64-YYYYMMDD
+sha256sum -c wook-observer-1.5.0-linux-amd64-YYYYMMDD.tar.gz.sha256
+tar -xzf wook-observer-1.5.0-linux-amd64-YYYYMMDD.tar.gz
+cd wook-observer-1.5.0-linux-amd64-YYYYMMDD
 ./install.sh
 # 새 .env에서 관리자 비밀번호와 접속 주소·포트 확인
 ./start.sh
 ```
 
-`install.sh`는 파일 무결성 확인, `docker load`, 새 자격 증명 생성을 수행합니다. 오프라인 Compose에는 빌드 항목이 없으며 `pull_policy: never`와 `--pull never`로 실행합니다. 로그인 후 **데이터 업데이트**에서 원본 `maven-osv.zip`을 저장하고 즉시 갱신하세요. 기존 PC의 DB·계정·SSH 키·보고서는 반입 묶음에 넣지 않습니다.
+`install.sh`는 파일 무결성 확인, `docker load`, 새 자격 증명 생성을 수행합니다. 오프라인 Compose에는 빌드 항목이 없으며 `pull_policy: never`와 `--pull never`로 실행합니다. 로그인 후 **데이터 업데이트**에서 `maven-osv.zip`과 `rpm-*.zip` 파일을 차례로 반영하세요. 파일별 원본 이름을 설정해 즉시 갱신하거나 파일 업로드를 사용할 수 있습니다. 기존 PC의 DB·계정·SSH 키·보고서는 반입 묶음에 넣지 않습니다.
 
-새 묶음을 만드는 **준비 PC에서만** Python 3와 Docker가 필요합니다. `v1.4.0`과 일치하는 `wook-observer:1.4.0`, `postgres:18.6-bookworm`의 amd64 이미지 및 `updates/maven-osv.zip`·manifest를 먼저 준비한 뒤 아래를 실행하세요. 이미지 내보내기에 `docker image save --platform`을 지원하는 Docker가 필요합니다.
+새 묶음을 만드는 **준비 PC에서만** Python 3.11 이상과 Docker가 필요합니다. `v1.5.0`과 일치하는 `wook-observer:1.5.0`, `postgres:18.6-bookworm`의 amd64 이미지 및 `updates/maven-osv.zip`·`updates/rpm-*.zip`·각 manifest를 먼저 준비한 뒤 아래를 실행하세요. 이미지 내보내기에 `docker image save --platform`을 지원하는 Docker가 필요합니다.
 
 ```bash
-python3 scripts/package-offline.py --output resources/offline/wook-observer-1.4.0-linux-amd64-YYYYMMDD
+python3 scripts/package-offline.py --output resources/offline/wook-observer-1.5.0-linux-amd64-YYYYMMDD
 # 생성 디렉터리의 별도 복사본에서 설치·기동·데이터 반영 검증
 # 원본 디렉터리의 VERIFICATION.md에 결과 기록 (.env 생성 금지)
-python3 scripts/package-offline.py --output resources/offline/wook-observer-1.4.0-linux-amd64-YYYYMMDD --archive-only
+python3 scripts/package-offline.py --output resources/offline/wook-observer-1.5.0-linux-amd64-YYYYMMDD --archive-only
 ```
 
 최종 `.tar.gz`와 `.tar.gz.sha256`은 `resources/offline/`에 생성되며 Git에 추가하지 않습니다. 동일 버전의 앱 이미지를 다시 포장할 때는 앱 태그를 유지하고 `PACKAGE-MANIFEST.json`에 묶음 개정·생성 시각·이미지/데이터 해시를 기록합니다. 소스 스냅샷만으로 폐쇄망에서 재빌드하려면 별도의 Maven 의존성 반입이 필요합니다.
@@ -132,6 +148,6 @@ python3 scripts/package-offline.py --output resources/offline/wook-observer-1.4.
 
 중앙 서비스의 언어는 자원 사용량과 운영 조건에 따라 변경할 수 있습니다. 현재는 기존 Spring Boot 구현을 유지하며, 측정 결과와 Python 등으로 전환할 기준은 [런타임 선택 기록](docs/runtime-decision.md)에 정리했습니다.
 
-Windows, Kubernetes/containerd, 비 Java OS 패키지 CVE, 이미지 레이어 전체 스캔, 실제 동적 클래스 로딩, systemd/리스닝 포트/호출 관계는 후속 범위입니다. 원격 JVM의 세부 수집은 권한·네임스페이스·도구에 의존합니다. 오류 0건이 전체 계층의 완전한 분석을 의미하지 않습니다.
+Windows, Kubernetes/containerd, 지원 배포판 이외 OS 패키지 CVE, 컨테이너별 패키지 DB·이미지 레이어 전체 스캔, 실제 동적 클래스 로딩, systemd/호출 관계는 후속 범위입니다. 원격 JVM의 세부 수집은 권한·네임스페이스·도구에 의존합니다. 오류 0건이 전체 계층의 완전한 분석을 의미하지 않습니다.
 
 규칙·요구사항·검증 이력은 [rules/rules.md](rules/rules.md), [rules/requirements.md](rules/requirements.md), [rules/versions.md](rules/versions.md)에서 관리합니다. 루트 `resources/`는 공유용이며 커밋하지 않습니다. 기존 `AGENTS.md`는 보존합니다. 실제 비밀번호·SSH 키·반입 데이터·보고서도 Git에서 제외합니다.

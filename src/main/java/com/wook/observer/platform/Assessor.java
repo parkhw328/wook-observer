@@ -24,7 +24,7 @@ public class Assessor {
     private static final Pattern FILENAME = Pattern.compile("(.+?)-(\\d[^/]*)\\.jar");
     private final Catalog catalog;
     public Assessor(Catalog catalog) { this.catalog = catalog; }
-    public Observation assess(Observation report) { return assess(report, catalog.snapshot()); }
+    public Observation assess(Observation report) { return assess(report, catalog.snapshot(report)); }
 
     public Observation assess(Observation report, Catalog.Snapshot snapshot) {
         List<Assessment.Finding> findings = new ArrayList<>();
@@ -85,7 +85,8 @@ public class Assessor {
                 if (found && unknown) { coverage.add(new Assessment.Coverage("CVE", asset, "미판정", "일부 권고 범위 미지원/불완전", identity.name(), library.version())); }
             }
         }
-        String scope = "Maven 버전 및 적용 OS의 설정 규칙 대조. 발견·의심만 조치 목록에 포함하며 비대상·미판정은 제외합니다. 미판정은 안전을 뜻하지 않습니다. 실제 로딩·악용 가능성·RPM/비 Java CVE·SSH Match는 별도 검토입니다.";
+        RpmAssessor.assess(report, snapshot.records(), findings, coverage);
+        String scope = "Maven 및 RHEL·Rocky·AlmaLinux 8/9/10 호스트 RPM EVR·공식 권고, 적용 OS의 설정 규칙 대조. RPM은 권고별 조치이며 관련 CVE 전체가 각 바이너리에 확정된다는 뜻은 아닙니다. 소스 RPM 대응은 의심, 모듈·공급자·RHEL 제품 스트림 미확인은 미판정입니다. 발견·의심만 조치 목록에 포함합니다. 실제 로딩·악용 가능성·컨테이너 RPM·SSH Match는 별도 검토입니다.";
         return report.assessed(new Assessment(snapshot.revision(), snapshot.updatedAt(), Instant.now(), scope,
                 findings.stream().distinct().toList(), coverage.stream().distinct().toList()));
     }

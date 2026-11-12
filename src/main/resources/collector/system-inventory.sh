@@ -43,7 +43,7 @@ elif ! command -v timeout >/dev/null 2>&1; then
   printf 'RPM_STATUS\tNO_TIMEOUT\n'
 else
   (
-    timeout -k 2 20 rpm -qa --qf 'RPM\t%{NAME}\t%{EPOCH}\t%{VERSION}\t%{RELEASE}\t%{ARCH}\n' 2>/dev/null
+    timeout -k 2 20 rpm -qa --qf 'RPM\t%{NAME}\t%{EPOCH}\t%{VERSION}\t%{RELEASE}\t%{ARCH}\t%{SOURCERPM}\t%|MODULARITYLABEL?{%{MODULARITYLABEL}}:{}|\t%{VENDOR}\n' 2>/dev/null
     system_rc=$?
     case "$system_rc" in
       0) printf '\nRPM_STATUS\tCOLLECTED\n';;
@@ -57,4 +57,68 @@ else
       if (limited || status == "") print "RPM_STATUS\tTRUNCATED";
       else print status;
     }'
+fi
+
+# Read only repository identifiers; never emit URLs, credentials, or run dnf/plugins.
+(
+  repo_count=0
+  repo_status=COLLECTED
+  for repo_file in /etc/yum.repos.d/*.repo; do
+    [ -f "$repo_file" ] || continue
+    repo_count=$((repo_count + 1))
+    if [ "$repo_count" -gt 64 ]; then repo_status=TRUNCATED; break; fi
+    if [ ! -r "$repo_file" ]; then repo_status=FAILED; continue; fi
+    head -c 65537 "$repo_file" | awk '
+      function emit() {
+        if (id != "" && enabled == 1) {
+          if (id ~ /^[A-Za-z0-9_.:-]+$/ && length(id) <= 200) print "RPM_REPO\t" id;
+          else print "RPM_REPO_STATUS\tFAILED";
+        }
+      }
+      { bytes += length($0) + 1; sub(/\r$/, ""); }
+      /^[ \t]*\[/ { emit(); id=$0; sub(/^[ \t]*\[/,"",id); sub(/\][ \t]*$/, "",id); enabled=1; next }
+      /^[ \t]*enabled[ \t]*=/ {
+        value=$0; sub(/^[^=]*=[ \t]*/,"",value); sub(/[ \t]*[;#].*$/, "",value); sub(/[ \t]*$/, "",value);
+        if (value !~ /^(0|1)$/) print "RPM_REPO_STATUS\tFAILED";
+        enabled=(value == "1");
+      }
+      END { emit(); if (bytes > 65536) print "RPM_REPO_STATUS\tTRUNCATED"; }
+    '
+  done
+  [ "$repo_count" -gt 0 ] || repo_status=UNAVAILABLE
+  for repo_release in /etc/dnf/vars/releasever /etc/yum/vars/releasever; do
+    [ -e "$repo_release" ] || continue
+    if [ ! -r "$repo_release" ]; then repo_status=FAILED; continue; fi
+    head -c 65 "$repo_release" | awk '
+      { sub(/\r$/, ""); if ($0 ~ /^[0-9]+(\.[0-9]+)?$/ && length($0) <= 5) print "RPM_RELEASEVER\t" $0;
+        else print "RPM_REPO_STATUS\tFAILED"; }
+    '
+  done
+  printf 'RPM_REPO_STATUS\t%s\n' "$repo_status"
+) | head -c 65536
+
+# Listening TCP and all bound UDP sockets in this network namespace. No port scans.
+if ! command -v ss >/dev/null 2>&1 || ! command -v timeout >/dev/null 2>&1; then
+  printf 'SOCKET_STATUS\tUNAVAILABLE\n'
+else
+  (
+    for socket_protocol in tcp udp; do
+      (
+        if [ "$socket_protocol" = tcp ]; then
+          timeout -k 2 5 ss -H -lntp 2>/dev/null
+        else
+          timeout -k 2 5 ss -H -naup 2>/dev/null
+        fi
+        socket_rc=$?
+        printf '\nSOCKET_QUERY_STATUS\t%s\t%s\n' "$socket_protocol" "$socket_rc"
+      ) | awk -v protocol="$socket_protocol" '
+        /^SOCKET_QUERY_STATUS\t/ { print; next }
+        NF { printf "SOCKET\t%s\t%s\n", protocol, $0 }
+      '
+    done
+  ) | head -c 524288 | awk '
+    /^SOCKET\t/ { count++; if (count <= 4096) print; else limited=1; next }
+    /^SOCKET_QUERY_STATUS\t/ { print; next }
+    END { if (limited) print "SOCKET_STATUS\tTRUNCATED"; }
+  '
 fi

@@ -17,12 +17,18 @@ public record Assessment(int catalogRevision, String catalogUpdatedAt, Instant e
 
     public record Finding(String kind, String id, String asset, String status, String severity,
                           String title, String evidence, String reference, String packageName, String version,
-                          String recommendation, List<String> aliases) {
+                          String recommendation, List<String> aliases, List<String> relatedIds) {
         public Finding {
             packageName = packageName == null ? "" : packageName;
             version = version == null ? "" : version;
             recommendation = recommendation == null ? "공식 권고와 서비스 영향 검토" : recommendation;
             aliases = aliases == null ? List.of() : List.copyOf(aliases);
+            relatedIds = relatedIds == null ? List.of() : List.copyOf(relatedIds);
+        }
+        public Finding(String kind, String id, String asset, String status, String severity,
+                       String title, String evidence, String reference, String packageName, String version,
+                       String recommendation, List<String> aliases) {
+            this(kind, id, asset, status, severity, title, evidence, reference, packageName, version, recommendation, aliases, List.of());
         }
         public Finding(String kind, String id, String asset, String status, String severity,
                        String title, String evidence, String reference) {
@@ -78,4 +84,9 @@ public record Assessment(int catalogRevision, String catalogUpdatedAt, Instant e
     }
 
     public static String libraryAsset(long pid, Observation.Library library) { return "library:" + pid + ":" + library.path(); }
+    public static String rpmAsset(SystemInventory.RpmPackage rpm) { return "rpm:" + rpm.nevra(); }
+
+    public String rpmStatus(SystemInventory.RpmPackage rpm) {
+        return coverage.stream().anyMatch(c -> c.kind().equals("RPM")) ? status(rpmAsset(rpm)) : "미실시(이전 점검)";
+    }
 }

@@ -70,19 +70,21 @@ public class ExcelReports {
             summary.add("수집 오류 수", report.issues().size());
             summary.add("RPM 수집 상태", report.systemInventory().rpm().status().label());
             summary.add("RPM 수집 항목 수", report.systemInventory().rpm().packages().size());
+            summary.add("열린 포트 수집 상태", report.systemInventory().sockets().status().label());
+            summary.add("TCP/UDP 바인딩 소켓 수", report.systemInventory().sockets().entries().size());
             if (report.assessment() != null) {
                 summary.add("취약점 데이터 버전", report.assessment().catalogRevision());
                 summary.add("취약점 데이터 반영 시각", report.assessment().catalogUpdatedAt());
                 summary.add("취약점 판정 범위", report.assessment().scope());
                 Table findings = table(workbook, styles, tables, "취약점 상세", "발견·의심만 표시합니다. ID·직군·패키지·버전별로 묶고 영향 위치를 보존합니다.",
-                        "종류", "ID", "직군", "패키지", "설치 버전", "취약점발견", "심각도", "제목", "영향 위치", "근거", "조치", "참조", "권고 ID·별칭");
+                        "종류", "ID", "직군", "패키지", "설치 버전", "취약점발견", "심각도", "제목", "영향 위치", "근거", "조치", "참조", "권고 ID·별칭", "권고 관련 CVE (개별 영향 확정 아님)");
                 operator.actions().forEach(a -> findings.add(a.kind(), a.id(), a.serviceGroup(), a.packageName(), a.version(), a.status(), a.severity(), a.title(),
                         String.join("; ", a.locations().stream().map(OperatorReport.Location::label).toList()), String.join("; ", a.evidence()),
-                        String.join("; ", a.recommendations()), String.join("; ", a.references()), String.join(", ", a.aliases())));
+                        String.join("; ", a.recommendations()), String.join("; ", a.references()), String.join(", ", a.aliases()), String.join(", ", a.relatedIds())));
                 Row link = summary.add("취약점 상세", "시트 열기");
                 summary.link(link.getCell(1), findings.name(), 0);
             }
-            Table coverage = table(workbook, styles, tables, "점검 범위", "미판정·비대상은 조치 수에서 제외합니다. CVE는 라이브러리 위치, 설정은 대상별 규칙 수이며 상태별 중복이 가능합니다.",
+            Table coverage = table(workbook, styles, tables, "점검 범위", "미판정·비대상은 조치 수에서 제외합니다. CVE는 라이브러리 위치, RPM은 설치 NEVRA, 설정은 대상별 규칙 수이며 상태별 중복이 가능합니다.",
                     "종류", "판정", "이유", "항목 수");
             operator.coverage().forEach(c -> coverage.add(c.kind(), c.status(), c.reason(), c.count()));
             if (report.assessment() == null) { coverage.add("전체", "미실시", "중앙 웹서비스에서 취약점 대조 필요", 0); }
@@ -90,7 +92,7 @@ public class ExcelReports {
             summary.link(coverageLink.getCell(1), coverage.name(), 0);
             summary.add("원문 문서 수", documents.size());
             summary.add("해석 주의", "라이브러리 발견은 실제 로딩이나 오픈소스 여부·라이선스 확인을 의미하지 않습니다. Java 수에는 수집기 자체가 포함될 수 있습니다.");
-            summary.add("관측 한계", "RPM 외 패키지 상세, RPM CVE 대조, 컨테이너별 RPM DB, 동적 클래스 로더, systemd, 호스트 리스닝 포트, Kubernetes 계층은 미지원입니다. SSH와 로컬 수집의 도구·권한 차이는 수집 오류를 확인하세요.");
+            summary.add("관측 한계", "RPM 대조는 RHEL·Rocky·AlmaLinux 8/9/10의 등록된 공식 권고 범위입니다. 모듈·공급자·제품 스트림 미확인은 미판정입니다. 컨테이너별 RPM DB, 동적 로딩, systemd, Kubernetes는 미지원입니다. 열린 포트는 외부 접근 가능성을 증명하지 않습니다.");
             summary.add("분류 기준", "실행 파일·이미지 이름 휴리스틱 및 사용자 설정. 기타 직군은 자동 분류 미확정 항목을 포함합니다.");
             summary.add("숫자와 긴 값", "컨테이너 ID·15자리 초과 정수는 텍스트로 보존합니다. " + LONG_VALUE_NOTE);
 
@@ -110,9 +112,18 @@ public class ExcelReports {
             if (report.systemInventory().os().isEmpty()) { os.add("OS 상세", "", "미수집", "이전 스냅샷은 재점검 필요"); }
             var rpm = report.systemInventory().rpm();
             Table packages = table(workbook, styles, tables, "RPM 패키지", rpm.status().label() + ": " + rpm.message()
-                    + " 근거: rpm -qa --qf (NAME, EPOCH, VERSION, RELEASE, ARCH). Epoch 미지정=0. 20초·20,000건·4 MiB 제한. 호스트 파일시스템 범위이며 RPM CVE 대조 미지원.",
-                    "이름", "Epoch", "버전", "Release", "아키텍처", "NEVRA");
-            rpm.packages().forEach(p -> packages.add(p.name(), p.epoch(), p.version(), p.release(), p.architecture(), p.nevra()));
+                    + " 근거: rpm -qa --qf. Epoch 미지정=0. 20초·20,000건·4 MiB 제한. RPM EVR의 저장된 판정이며 컨테이너별 RPM DB는 미지원. 저장소=" + String.join(", ", rpm.enabledRepositories()) + "; 릴리스 고정=" + rpm.releaseVersion(),
+                    "이름", "Epoch", "버전", "Release", "아키텍처", "NEVRA", "취약점발견", "소스 RPM", "모듈", "공급자");
+            var rpmStates = report.assessment() == null ? Map.<String, String>of() : report.assessment().statuses();
+            String rpmFallback = report.assessment() == null ? "미실시" : report.assessment().coverage().stream().anyMatch(c -> c.kind().equals("RPM")) ? "미판정" : "미실시(이전 점검)";
+            rpm.packages().forEach(p -> packages.add(p.name(), p.epoch(), p.version(), p.release(), p.architecture(), p.nevra(),
+                    rpmStates.getOrDefault(com.wook.observer.model.Assessment.rpmAsset(p), rpmFallback), p.sourceRpm(), p.modularityLabel(), p.vendor()));
+            var sockets = report.systemInventory().sockets();
+            Table ports = table(workbook, styles, tables, "열린 포트", sockets.status().label() + ": " + sockets.message()
+                    + " ss -H -lntp / ss -H -naup. 프로토콜별 5초·4,096개·512 KiB 제한. 현재 네트워크 네임스페이스이며 방화벽·외부 접속 가능성은 별도 확인.",
+                    "프로토콜", "바인딩 주소", "포트", "상태", "PID · 프로세스");
+            sockets.entries().forEach(s -> ports.add(s.protocol(), s.localAddress(), s.localPort(), s.state(),
+                    s.processes().isEmpty() ? "미확인(권한/프로세스 종료 등)" : String.join(", ", s.processes().stream().map(p -> "PID " + p.pid() + " / " + p.name()).toList())));
 
             Table categories = table(workbook, styles, tables, "직군별 현황", "명세 열의 링크를 누르면 해당 직군의 상세 시트로 이동합니다.",
                     "직군", "코드", "프로세스 수", "JVM 수", "라이브러리 항목 수", "컨테이너 수", "프로세스 명세", "오픈소스 명세", "컨테이너 명세");

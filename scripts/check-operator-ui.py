@@ -15,6 +15,8 @@ parser.add_argument('--url', required=True)
 parser.add_argument('--env-file', type=Path, required=True)
 parser.add_argument('--job', required=True)
 parser.add_argument('--output', type=Path, required=True)
+parser.add_argument('--expect-id', default='CVE-2021-44228')
+parser.add_argument('--expect-system', action='store_true')
 args = parser.parse_args()
 env = dict(line.split('=', 1) for line in args.env_file.read_text().splitlines() if '=' in line and not line.startswith('#'))
 args.output.mkdir(parents=True, exist_ok=True)
@@ -94,13 +96,24 @@ with sync_playwright() as pw:
     page.goto(url + '/#jobs')
     page.locator('[data-action=detail][data-id="' + args.job + '"]').click()
     page.locator('#modal[open]').wait_for()
-    assert 'CVE-2021-44228' in page.locator('#modal-content').inner_text()
+    assert args.expect_id in page.locator('#modal-content').inner_text()
     assert '적용 플랫폼 미일치/미확인' not in page.locator('#modal-content').inner_text()
     assert page.locator('.report-section').count() == 3
     assert not page.locator('.report-section[open]').count()
     page.screenshot(path=str(args.output / 'report-desktop.png'), full_page=True)
     assert 'JetBrains' not in page.evaluate('getComputedStyle(document.documentElement).fontFamily')
     checks['compactActionsAndCollapsedEvidence'] = True
+    if args.expect_system:
+        section = page.locator('.report-section').filter(has=page.locator('summary', has_text='OS·커널')).first
+        section.locator('summary').first.click()
+        ports_text = section.inner_text().replace(',', '')
+        assert '18081' in ports_text and '18082' in ports_text and '18083' in ports_text
+        assert 'TCP' in section.inner_text() and 'UDP' in section.inner_text()
+        assert '의심' in section.inner_text() or '발견' in section.inner_text()
+        assert '소스·모듈·공급자' in section.inner_text()
+        section.scroll_into_view_if_needed()
+        page.screenshot(path=str(args.output / 'rpm-ports-desktop.png'), full_page=True)
+        checks['rpmAndPortsVisible'] = True
     for name, width, height, zoom in [('mobile', 390, 844, 1), ('zoom', 1440, 1000, 2)]:
         page.set_viewport_size({'width': width, 'height': height})
         page.evaluate('(zoom) => document.documentElement.style.zoom = zoom', zoom)

@@ -1,0 +1,10 @@
+Red Hat repository-to-CPE mapping
+Copyright Red Hat, Inc. Licensed under Creative Commons Attribution 4.0 International.
+License: https://creativecommons.org/licenses/by/4.0/
+Local license text: redhat-repositories-license.txt
+Source: https://security.access.redhat.com/data/metrics/repository-to-cpe.json
+
+redhat-repositories.json is a derived subset for RHEL 8/9/10 product families.
+Repository IDs are preserved and selected CPEs are converted to OSV ecosystem names.
+Upstream timestamps, retrieval time and original SHA-256 are recorded in that file.
+The mapping is bundled locally; no runtime contact with Red Hat is required.

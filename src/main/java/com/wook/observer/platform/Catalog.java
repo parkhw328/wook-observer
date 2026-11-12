@@ -40,8 +40,37 @@ public class Catalog {
     }
 
     public synchronized Snapshot snapshot() {
-        return new Snapshot(((Number) status().get("revision")).intValue(), Store.string(status(), "imported_at"),
-                store.rows("SELECT document FROM catalog_entry").stream().map(row -> json.readTree(Store.string(row, "document"))).toList());
+        return snapshot(null);
+    }
+
+    /** Stream the DB cursor and retain only the target's affected entries; stored originals remain intact. */
+    public synchronized Snapshot snapshot(com.wook.observer.model.Observation report) {
+        var rpmSelection = report == null ? null : RpmAssessor.selection(report);
+        boolean maven = report == null || report.javaProcesses().stream().anyMatch(j -> !j.libraries().isEmpty());
+        return transactions.execute(transaction -> {
+            var state = status();
+            List<JsonNode> records = new java.util.ArrayList<>();
+            store.jdbc.query(connection -> {
+                var statement = connection.prepareStatement("SELECT document FROM catalog_entry");
+                // PostgreSQL requires a transaction and a positive fetch size for a bounded server cursor.
+                statement.setFetchSize(32);
+                return statement;
+            }, (org.springframework.jdbc.core.RowCallbackHandler) row -> {
+                JsonNode record = json.readTree(row.getString(1));
+                if (report == null || !"CVE".equals(kind(record))) { records.add(record); return; }
+                if (record.hasNonNull("withdrawn")) { return; }
+                var selected = json.createArrayNode();
+                for (JsonNode affected : record.path("affected")) {
+                    if ((maven && "Maven".equals(affected.path("package").path("ecosystem").asText()))
+                            || rpmSelection.test(affected)) { selected.add(affected); }
+                }
+                if (!selected.isEmpty()) {
+                    ((tools.jackson.databind.node.ObjectNode) record).set("affected", selected);
+                    records.add(record);
+                }
+            });
+            return new Snapshot(((Number) state.get("revision")).intValue(), Store.string(state, "imported_at"), List.copyOf(records));
+        });
     }
 
     public List<Map<String, Object>> search(String query, int page) {

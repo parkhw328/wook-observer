@@ -299,7 +299,7 @@ async function catalogView() {
         ? '<a class="button primary" href="#updates">데이터 반입 / 업데이트 →</a>'
         : "",
     ) +
-    `<div class="note">카탈로그 버전 <b>${status.revision}</b> · 최근 반영 ${date(status.imported_at)}<br>목록 출처: ${esc(status.source)}<br>버전 비교는 Maven 패키지를 지원합니다. 다른 생태계의 OSV 항목은 저장·조회만 지원합니다.</div><section class="panel"><form class="search" id="catalog-search"><label>식별자 / 패키지 검색<input name="query" value="${esc(query)}" maxlength="200" placeholder="CVE, GHSA, CCE 또는 패키지 이름"></label><button type="submit">검색</button></form>` + pager +
+    `<div class="note">카탈로그 버전 <b>${status.revision}</b> · 최근 반영 ${date(status.imported_at)}<br>목록 출처: ${esc(status.source)}<br>Maven 및 RHEL·Rocky·AlmaLinux 8/9/10 호스트 RPM을 대조합니다. RPM은 배포판별 보안 권고·EVR 기준이며 모듈·제품 스트림 미확인은 미판정입니다.</div><section class="panel"><form class="search" id="catalog-search"><label>식별자 / 패키지 검색<input name="query" value="${esc(query)}" maxlength="200" placeholder="CVE, RHSA, RLSA, ALSA, GHSA 또는 패키지"></label><button type="submit">검색</button></form>` + pager +
     (rows.length
       ? table(
           ["종류", "식별자", "패키지 / 설정", "제목 · 상태"],
@@ -369,14 +369,28 @@ function systemDetails(report) {
     TIMEOUT: "시간 제한", TRUNCATED: "일부 수집·제한", NOT_COLLECTED: "미수집" };
   const rpm = inventory?.rpm;
   const packages = rpm?.packages || [];
+  const socketInventory = inventory?.sockets;
+  const sockets = socketInventory?.entries || [];
+  const assessment = report.assessment;
+  const rpmStates = new Map();
+  const rank = { "발견": 0, "의심": 1, "미판정": 2, "미발견": 3, "비대상": 4 };
+  for (const row of [...(assessment?.coverage || []), ...(assessment?.findings || [])]) {
+    if (row.kind === "RPM" && (!rpmStates.has(row.asset) || rank[row.status] < rank[rpmStates.get(row.asset)])) rpmStates.set(row.asset, row.status);
+  }
+  const rpmFallback = assessment ? (rpmStates.size ? "미판정" : "미실시(이전 점검)") : "미실시";
   return '<h3>OS·커널 정보</h3>' +
     (inventory?.os?.length ? table(["근거", "수집 상태", "값"], inventory.os.map(d =>
       `<tr><td>${esc(d.source)}</td><td class="system-status">${esc(statuses[d.status] || "미수집")}</td><td class="system-value">${esc(d.value || "—")}</td></tr>`))
       : empty("OS 상세 미수집", "이전 버전의 결과는 다시 점검하면 OS·RPM 정보를 확인할 수 있습니다.")) +
+    '<h3>열린 포트 · TCP 리스닝 / UDP 바인딩</h3>' +
+    `<p>${esc(statuses[socketInventory?.status] || "미수집")} · 소켓 ${number(sockets.length)}개</p><p class="small">${esc(socketInventory?.message || "이전 결과는 새 점검부터 포트를 수집합니다.")} 현재 네트워크 네임스페이스의 주소이며 방화벽·외부 접속 가능성은 별도 확인합니다.</p>` +
+    (sockets.length ? table(["프로토콜", "바인딩 주소", "포트", "상태", "PID · 프로세스"], sockets.slice(0, 200).map(s =>
+      `<tr><td>${esc(s.protocol)}</td><td>${esc(s.localAddress)}</td><td>${esc(s.localPort)}</td><td>${esc(s.state)}</td><td>${s.processes?.length ? s.processes.map(p => `PID ${number(p.pid)} / ${esc(p.name)}`).join("<br>") : "미확인(권한/프로세스 종료 등)"}</td></tr>`)) : "") +
+    (sockets.length > 200 ? '<p class="small">첫 200개 소켓입니다. 전체 목록은 XLSX·JSON·ZIP에서 확인하세요.</p>' : "") +
     '<h3>설치 RPM 패키지</h3>' +
-    `<p>${esc(statuses[rpm?.status] || "미수집")} · 수집 항목 ${number(packages.length)}건</p><p class="small">${esc(rpm?.message || "이 스냅샷에서는 RPM을 수집하지 않았습니다.")} 호스트 파일시스템 범위이며 컨테이너별 RPM DB와 RPM CVE 대조는 미지원입니다.</p>` +
-    (packages.length ? table(["이름", "Epoch", "버전", "Release", "아키텍처"], packages.slice(0, 100).map(p =>
-      `<tr><td>${esc(p.name)}</td><td>${esc(p.epoch)}</td><td>${esc(p.version)}</td><td>${esc(p.release)}</td><td>${esc(p.architecture)}</td></tr>`)) : "") +
+    `<p>${esc(statuses[rpm?.status] || "미수집")} · 수집 항목 ${number(packages.length)}건</p><p class="small">${esc(rpm?.message || "이 스냅샷에서는 RPM을 수집하지 않았습니다.")} RHEL·Rocky·AlmaLinux 8/9/10의 공식 권고와 저장된 판정입니다. 컨테이너별 RPM DB는 미지원입니다.</p><details><summary>저장소·제품 스트림 근거</summary><p>${esc(statuses[rpm?.repositoryStatus] || "미수집")} · 릴리스 고정 ${esc(rpm?.releaseVersion || "없음/미확인")}</p><p>${esc((rpm?.enabledRepositories || []).join(", "))}</p></details>` +
+    (packages.length ? table(["이름", "설치 EVR", "아키텍처", "취약점발견", "패키지 근거"], packages.slice(0, 100).map(p =>
+      `<tr><td>${esc(p.name)}</td><td>${esc(p.epoch)}:${esc(p.version)}-${esc(p.release)}</td><td>${esc(p.architecture)}</td><td>${badge(rpmStates.get(`rpm:${p.name}-${p.epoch}:${p.version}-${p.release}.${p.architecture}`) || rpmFallback)}</td><td><details><summary>소스·모듈·공급자</summary>${esc(p.sourceRpm || "미확인")}<br>${esc(p.modularityLabel || "비모듈/미확인")}<br>${esc(p.vendor || "미확인")}</details></td></tr>`)) : "") +
     (packages.length > 100 ? '<p class="small">첫 100건을 표시합니다. 전체 수집 목록은 XLSX·JSON·ZIP에서 확인하세요.</p>' : "");
 }
 async function detail(id) {
@@ -387,16 +401,16 @@ async function detail(id) {
   $("#modal-content").innerHTML =
     `<div class="details-header"><div><p class="eyebrow">INSPECTION REPORT</p><h2>${esc(report.host.name)}</h2></div><span class="badge good">수집 완료</span></div><p class="small">${date(report.collectedAt)} · ${esc(report.host.scope)}</p><div class="actions">${downloads(id)}</div><div class="detail-grid"><div>프로세스<strong>${number(report.processes.length)}</strong></div><div>고유 라이브러리<strong>${number(operator.libraries.length)}</strong></div><div>발견·의심 조치<strong>${number(actions.length)}</strong></div></div><p class="small">카탈로그 개정 ${report.assessment?.catalogRevision ?? "미실시"} · 직군·패키지·버전별 중복 제거. 비대상·미판정은 조치 수에서 제외합니다.</p><h3>발견·의심 조치 ${actions.length > 200 ? "(첫 200건)" : ""}</h3>` +
     (actions.length ? table(["종류 / ID", "직군 · 패키지", "취약점발견", "심각도", "근거 · 조치"], actions.slice(0, 200).map(a =>
-      `<tr><td><b>${esc(a.id)}</b><div class="small">${esc(a.kind)}</div></td><td>${esc(a.serviceGroup)}<br>${esc(a.packageName)}<br><b>${esc(a.version)}</b></td><td>${badge(a.status)}</td><td>${badge(a.severity)}</td><td><b>${esc(a.title)}</b><p>${list(a.recommendations)}</p><details><summary>근거 · 영향 위치 ${a.locations.length}곳</summary><p>${list(a.evidence)}</p><p>${list(a.locations.map(location))}</p><p class="small">${list(a.aliases)}<br>${list(a.references)}</p></details></td></tr>`))
+      `<tr><td><b>${esc(a.id)}</b><div class="small">${esc(a.kind)}</div></td><td>${esc(a.serviceGroup)}<br>${esc(a.packageName)}<br><b>${esc(a.version)}</b></td><td>${badge(a.status)}</td><td>${badge(a.severity)}</td><td><b>${esc(a.title)}</b><p>${list(a.recommendations)}</p><details><summary>근거 · 영향 위치 ${a.locations.length}곳</summary><p>${list(a.evidence)}</p><p>${list(a.locations.map(location))}</p><p class="small">${list(a.aliases)}<br>${list(a.references)}</p>${a.relatedIds?.length ? `<p class="small">권고의 관련 CVE (각 바이너리의 개별 영향 확정 아님)<br>${list(a.relatedIds)}</p>` : ""}</details></td></tr>`))
       : empty("발견·의심 항목이 없습니다", "미판정은 안전 판정이 아닙니다. 아래 점검 범위를 확인하세요.")) +
     '<h3>점검 범위</h3>' +
-    `<p class="small">${esc(report.assessment?.scope || "취약점 대조 미실시")} CVE는 라이브러리 위치, 설정은 대상별 규칙 수입니다. 일부 미지원 권고가 있으면 상태별 중복될 수 있습니다.</p>` +
+    `<p class="small">${esc(report.assessment?.scope || "취약점 대조 미실시")} CVE는 라이브러리 위치, RPM은 설치 NEVRA, 설정은 대상별 규칙 수입니다. 일부 미지원 권고가 있으면 상태별 중복될 수 있습니다.</p>` +
     table(["종류", "판정", "이유", "항목 수"], operator.coverage.map(c => `<tr><td>${esc(c.kind)}</td><td>${esc(c.status)}</td><td>${esc(c.reason)}</td><td>${number(c.count)}</td></tr>`)) +
     `<details class="report-section"><summary>라이브러리 명세 · ${number(operator.libraries.length)}개 (직군·버전별)</summary>` +
     table(["패키지", "버전", "취약점발견", "관련 ID", "식별 · 영향 위치"], operator.libraries.slice(0, 200).map(l =>
       `<tr><td>${esc(l.name)}</td><td>${esc(l.version)}</td><td>${esc(l.status)}</td><td>${list(l.advisories)}</td><td><details><summary>위치 ${l.locations.length}곳</summary><p>${list(l.evidence)}</p>${list(l.locations.map(location))}</details></td></tr>`)) +
     '<p class="small">첫 200개를 표시합니다. 직군별 전체 명세와 원문은 XLSX·ZIP·JSON으로 내려받을 수 있습니다.</p></details>' +
-    '<details class="report-section"><summary>OS·커널 · 설치 RPM 명세</summary>' + systemDetails(report) + '</details>' +
+    '<details class="report-section"><summary>OS·커널 · 열린 포트 · 설치 RPM 명세</summary>' + systemDetails(report) + '</details>' +
     `<details class="report-section"><summary>수집 제한 · 오류 ${operator.issues.length}종류</summary>` +
     table(["계층", "대상", "내용"], operator.issues.map(i => `<tr><td>${esc(i.layer)}</td><td>${list(i.targets)}</td><td>${esc(i.message)}</td></tr>`)) + '</details>';
   $("#modal").showModal();

@@ -20,6 +20,7 @@ public class MarkdownReports {
         documents.put("coverage.md", coverage(report, operator));
         documents.put("host/os.md", operatingSystem(report));
         documents.put("host/rpm-packages.md", rpmPackages(report));
+        documents.put("host/listening-ports.md", listeningPorts(report));
         for (ServiceCategory category : ServiceCategory.values()) {
             String base = "services/" + category.directory() + "/";
             documents.put(base + "processes.md", processes(report, category));
@@ -44,7 +45,7 @@ public class MarkdownReports {
             out.append("카탈로그 개정 ").append(report.assessment().catalogRevision()).append(" / 반영 ")
                     .append(cell(report.assessment().catalogUpdatedAt())).append(". 비대상·미판정은 위 조치 수에 포함하지 않습니다. 미판정은 안전을 뜻하지 않습니다.\n\n");
         } else { out.append("취약점 대조 미실시. 중앙 웹서비스에서 점검해야 저장된 기준으로 대조합니다.\n\n"); }
-        out.append("## 명세\n\n[OS·커널](host/os.md) · [설치 RPM](host/rpm-packages.md) (수집 ")
+        out.append("## 명세\n\n[OS·커널](host/os.md) · [열린 포트](host/listening-ports.md) · [설치 RPM](host/rpm-packages.md) (수집 ")
                 .append(report.systemInventory().rpm().packages().size()).append("건, ").append(report.systemInventory().rpm().status().label()).append(")\n\n")
                 .append("| 직군 | 프로세스 | 오픈소스 | 컨테이너 |\n| --- | --- | --- | --- |\n");
         for (ServiceCategory category : ServiceCategory.values()) {
@@ -75,6 +76,7 @@ public class MarkdownReports {
             row(out, "근거", String.join("; ", action.evidence()));
             row(out, "조치", String.join("; ", action.recommendations()));
             row(out, "권고 ID·별칭", String.join(", ", action.aliases()));
+            if (!action.relatedIds().isEmpty()) { row(out, "권고의 관련 CVE (각 바이너리의 개별 영향 확정 아님)", String.join(", ", action.relatedIds())); }
             row(out, "참조", String.join("; ", action.references()));
             out.append("\n");
         }
@@ -84,14 +86,14 @@ public class MarkdownReports {
     private String coverage(Observation report, OperatorReport operator) {
         var out = new StringBuilder("# 점검 범위\n\n");
         out.append(report.assessment() == null ? "취약점 대조 미실시." : cell(report.assessment().scope())).append("\n\n")
-                .append("CVE는 라이브러리 위치, CCE/POLICY는 대상별 규칙 수입니다. 일부 미지원 권고가 있는 위치는 여러 상태에 포함될 수 있습니다.\n\n")
+                .append("CVE는 라이브러리 위치, RPM은 설치 NEVRA, CCE/POLICY는 대상별 규칙 수입니다. 일부 미지원 권고가 있는 위치는 여러 상태에 포함될 수 있습니다.\n\n")
                 .append("| 종류 | 판정 | 이유 | 항목 수 |\n| --- | --- | --- | --- |\n");
         operator.coverage().forEach(c -> row(out, c.kind(), c.status(), c.reason(), c.count()));
         out.append("\n## 수집 제한 및 오류\n\n| 계층 | 대상 | 내용 |\n| --- | --- | --- |\n");
         operator.issues().forEach(i -> row(out, i.layer(), String.join(", ", i.targets()), i.message()));
         out.append("\n## 공통 해석 기준\n\n")
                 .append("- 라이브러리 존재는 실제 로딩·라이선스·오픈소스 여부 확인이 아닙니다. 파일명 후보는 좌표 확인이 필요합니다.\n")
-                .append("- RPM CVE, 컨테이너별 RPM DB, 동적 클래스 로더, systemd·호스트 리스닝 포트·Kubernetes는 미지원입니다.\n")
+                .append("- RPM은 RHEL·Rocky·AlmaLinux 8/9/10의 등록된 공식 권고 범위입니다. 모듈·공급자·제품 스트림 미확인은 미판정이며 컨테이너별 RPM DB·동적 로딩·systemd·Kubernetes는 미지원입니다.\n")
                 .append("- 순차 수집 스냅샷이며 이름 기반 서비스 분류는 설정으로 보정할 수 있습니다. 도구·권한 부족은 위 수집 제한을 확인하세요.\n")
                 .append("- 이전 보고서는 당시 판정과 개정을 보존합니다. 새로운 수집·판정은 재점검부터 적용합니다.\n");
         return out.toString();
@@ -145,9 +147,26 @@ public class MarkdownReports {
         out.append("수집 시작 시각: ").append(report.collectedAt()).append("\n\n관측 범위: ").append(cell(report.host().scope()))
                 .append("\n\n근거: `rpm -qa --qf 'RPM\\t%{NAME}\\t%{EPOCH}\\t%{VERSION}\\t%{RELEASE}\\t%{ARCH}\\n'`\n\n")
                 .append("상태: ").append(rpm.status().label()).append(" / 수집 항목: ").append(rpm.packages().size()).append("건\n\n")
-                .append(cell(rpm.message())).append("\n\n20초·20,000건·4 MiB 제한. Epoch 미지정은 0입니다. 여러 아키텍처·설치 버전은 각각 보존합니다. 설치 여부는 서비스 사용·실제 로딩을 의미하지 않습니다. 컨테이너별 RPM DB와 RPM CVE 대조는 미지원입니다.\n\n")
-                .append("| 이름 | Epoch | 버전 | Release | 아키텍처 | NEVRA | 취약점발견 |\n| --- | --- | --- | --- | --- | --- | --- |\n");
-        rpm.packages().forEach(p -> row(out, p.name(), p.epoch(), p.version(), p.release(), p.architecture(), p.nevra(), "—"));
+                .append(cell(rpm.message())).append("\n\n20초·20,000건·4 MiB 제한. Epoch 미지정은 0입니다. 여러 아키텍처·설치 버전은 각각 보존합니다. 설치 여부는 서비스 사용·실제 로딩을 의미하지 않습니다. RHEL·Rocky·AlmaLinux 8/9/10 RPM EVR 판정은 저장된 점검 결과이며 컨테이너별 RPM DB는 미지원입니다.\n\n")
+                .append("저장소 식별 상태: ").append(rpm.repositoryStatus().label()).append(" / 릴리스 고정: ").append(cell(rpm.releaseVersion()))
+                .append("\n\n활성 저장소 ID: ").append(cell(String.join(", ", rpm.enabledRepositories()))).append("\n\n")
+                .append("| 이름 | Epoch | 버전 | Release | 아키텍처 | NEVRA | 취약점발견 | 소스 RPM | 모듈 | 공급자 |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n");
+        var states = report.assessment() == null ? Map.<String, String>of() : report.assessment().statuses();
+        String fallback = report.assessment() == null ? "미실시" : report.assessment().coverage().stream().anyMatch(c -> c.kind().equals("RPM")) ? "미판정" : "미실시(이전 점검)";
+        rpm.packages().forEach(p -> row(out, p.name(), p.epoch(), p.version(), p.release(), p.architecture(), p.nevra(),
+                states.getOrDefault(com.wook.observer.model.Assessment.rpmAsset(p), fallback), p.sourceRpm(), p.modularityLabel(), p.vendor()));
+        return out.toString();
+    }
+
+    private String listeningPorts(Observation report) {
+        var sockets = report.systemInventory().sockets();
+        var out = new StringBuilder("# 열린 포트 명세\n\n근거: `ss -H -lntp` (TCP 리스닝), `ss -H -naup` (UDP 바인딩). ")
+                .append("현재 네트워크 네임스페이스의 조회이며 외부에서 접속 가능하다는 뜻은 아닙니다. 방화벽·NAT·컨테이너 내부 포트는 별도 확인합니다.\n\n")
+                .append("상태: ").append(sockets.status().label()).append(" / 소켓 ").append(sockets.entries().size()).append("개\n\n")
+                .append(cell(sockets.message())).append(" 프로토콜별 5초·전체 4,096개·512 KiB 제한. 같은 포트의 IPv4/IPv6 바인딩은 별도 소켓입니다.\n\n")
+                .append("| 프로토콜 | 바인딩 주소 | 포트 | 상태 | PID · 프로세스 |\n| --- | --- | --- | --- | --- |\n");
+        sockets.entries().forEach(s -> row(out, s.protocol(), s.localAddress(), s.localPort(), s.state(),
+                s.processes().isEmpty() ? "미확인(권한/프로세스 종료 등)" : String.join(", ", s.processes().stream().map(p -> "PID " + p.pid() + " / " + p.name()).toList())));
         return out.toString();
     }
 

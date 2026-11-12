@@ -26,25 +26,33 @@ class ExcelReportsTest {
     private final ReportWriter reports = new ReportWriter(new MarkdownReports(), excel);
 
     @Test
-    void exportsOsAndRpmEvidenceAndUnsupportedVulnerabilityStatusWithoutFormulaExecution() throws Exception {
+    void exportsOsRpmAndSocketEvidenceWithoutFormulaExecution() throws Exception {
         var base = ReportFixtures.sample();
         var parser = new com.wook.observer.collector.SystemInventoryParser();
         parser.accept("OSINFO\tkernel_release\tCOLLECTED\tNS4xNA==");
         parser.accept("RPM\t=hostile()\t2\t1.2\t3.el9\tx86_64");
         parser.accept("RPM_STATUS\tCOLLECTED");
+        parser.accept("SOCKET\ttcp\tLISTEN 0 10 [::]:18081 [::]:* users:((\"=hostile()\",pid=42,fd=3))");
+        parser.accept("SOCKET_QUERY_STATUS\ttcp\t0"); parser.accept("SOCKET_QUERY_STATUS\tudp\t0");
         var report = new Observation(base.version(), base.collectedAt(), base.host(), base.processes(), base.javaProcesses(),
                 base.containers(), base.issues(), base.facts(), null, parser.build(new java.util.ArrayList<>()));
         var docs = reports.documents(report);
         assertThat(docs.get("host/os.md")).contains("uname -r", "5.14");
-        assertThat(docs.get("host/rpm-packages.md")).contains("1.2", "3.el9", "x86&#95;64", "RPM CVE 대조는 미지원");
+        assertThat(docs.get("host/rpm-packages.md")).contains("1.2", "3.el9", "x86&#95;64", "RPM EVR");
+        assertThat(docs.get("host/listening-ports.md")).contains("TCP", "18081", "42", "hostile");
         try (var workbook = workbook(report, docs)) {
             assertThat(summaryValue(workbook, "RPM 수집 항목 수")).isEqualTo(1);
             var row = workbook.getSheet("RPM 패키지").getRow(3);
             assertThat(row.getCell(0).getCellType()).isEqualTo(CellType.STRING);
             assertThat(row.getCell(0).getStringCellValue()).isEqualTo("=hostile()");
             assertThat(row.getCell(5).getStringCellValue()).isEqualTo("=hostile()-2:1.2-3.el9.x86_64");
-            assertThat(row.getCell(6)).isNull();
-            assertThat(workbook.getSheet("RPM 패키지").getRow(1).getCell(0).getStringCellValue()).contains("CVE 대조 미지원");
+            assertThat(row.getCell(6).getStringCellValue()).isEqualTo("미실시");
+            assertThat(workbook.getSheet("RPM 패키지").getRow(1).getCell(0).getStringCellValue()).contains("RPM EVR");
+            var socket = workbook.getSheet("열린 포트").getRow(3);
+            assertThat(socket.getCell(0).getStringCellValue()).isEqualTo("TCP");
+            assertThat(socket.getCell(2).getNumericCellValue()).isEqualTo(18081);
+            assertThat(socket.getCell(4).getCellType()).isEqualTo(CellType.STRING);
+            assertThat(socket.getCell(4).getStringCellValue()).contains("42", "=hostile()");
             assertThat(restoredSources(workbook)).isEqualTo(docs);
         }
     }
@@ -54,7 +62,7 @@ class ExcelReportsTest {
         var report = ReportFixtures.sample();
         var originals = reports.documents(report);
         try (var workbook = workbook(report, originals)) {
-            assertThat(workbook.getNumberOfSheets()).isEqualTo(33);
+            assertThat(workbook.getNumberOfSheets()).isEqualTo(34);
             assertThat(workbook.getStylesSource().getCTStylesheet().getCellStyles().getCellStyleArray(0).getName()).isEqualTo("Normal");
             assertThat(restoredSources(workbook)).isEqualTo(originals);
             for (ServiceCategory category : ServiceCategory.values()) {

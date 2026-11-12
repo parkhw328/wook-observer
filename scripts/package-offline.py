@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Assemble the verified 1.4.0 images and public catalogs into an air-gap bundle.
+"""Assemble the verified 1.5.0 images and public catalogs into an air-gap bundle.
 
 Runs only on the preparation machine. Never exports live containers, .env, or DB volumes.
 """
@@ -15,9 +15,9 @@ import tarfile
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "1.4.0"
+VERSION = "1.5.0"
 IMAGES = [
-    ("wook-observer:1.4.0", "wook-observer-1.4.0.tar.gz"),
+    ("wook-observer:1.5.0", "wook-observer-1.5.0.tar.gz"),
     ("postgres:18.6-bookworm", "postgres-18.6-bookworm.tar.gz"),
 ]
 
@@ -72,6 +72,16 @@ def prepare(bundle):
         count = len([entry for entry in source.infolist() if not entry.is_dir()])
         if count != origin["records"] or source.testzip() is not None:
             raise SystemExit("Maven catalog ZIP validation failed")
+    rpm_origin = json.loads((ROOT / "updates/rpm-catalog.manifest.json").read_text())
+    for item in rpm_origin["files"]:
+        if Path(item["file"]).name != item["file"] or not item["file"].startswith("rpm-"):
+            raise SystemExit("Invalid RPM catalog filename")
+        path = ROOT / "updates" / item["file"]
+        if sha256(path) != item["sha256"] or path.stat().st_size != item["bytes"]:
+            raise SystemExit("RPM catalog and manifest do not match: " + item["file"])
+        with zipfile.ZipFile(path) as source:
+            if len(source.infolist()) != item["records"] or source.testzip() is not None:
+                raise SystemExit("RPM catalog ZIP validation failed")
     commit = run("git", "rev-parse", f"v{VERSION}^{{commit}}", capture_output=True, text=True).stdout.strip()
     tracked = run("git", "ls-tree", "-r", "--name-only", commit, capture_output=True, text=True).stdout.splitlines()
     if any(name == ".env" or name.startswith(("resources/", ".tools/", "reports/")) for name in tracked):
@@ -101,15 +111,24 @@ def prepare(bundle):
     (bundle / "images/images.list").write_text("".join(f"{image['reference']} {image['runtimeFingerprint']} {image['archive']}\n" for image in images))
     shutil.copy2(catalog, bundle / "updates/maven-osv.zip")
     shutil.copy2(ROOT / "updates/maven-osv.manifest.json", bundle / "updates/maven-osv.manifest.json")
+    shutil.copy2(ROOT / "updates/rpm-catalog.manifest.json", bundle / "updates/rpm-catalog.manifest.json")
+    for item in rpm_origin["files"]:
+        shutil.copy2(ROOT / "updates" / item["file"], bundle / "updates" / item["file"])
     # Read application seed and documentation from the same immutable source tag as the shipped application.
     seed = run("git", "show", f"{commit}:src/main/resources/catalog/bootstrap.json", capture_output=True).stdout
     (bundle / "updates/catalog.json").write_bytes(seed)
     for source, destination in (("LICENSE", "LICENSE"), ("README.md", "docs/application-readme.md"), ("docs/catalog.md", "docs/catalog.md"), ("docs/ssh-access.md", "docs/ssh-access.md"), ("docs/runtime-decision.md", "docs/runtime-decision.md"), ("docs/interface.md", "docs/interface.md"), ("docs/operator-report.md", "docs/operator-report.md")):
         (bundle / destination).write_bytes(run("git", "show", f"{commit}:{source}", capture_output=True).stdout)
+    for source in tracked:
+        if source.startswith("docs/licenses/"):
+            destination = bundle / source
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(run("git", "show", f"{commit}:{source}", capture_output=True).stdout)
     source_archive = bundle / f"source/wook-observer-{VERSION}-source.tar.gz"
     run("git", "archive", "--format=tar.gz", f"--prefix=wook-observer-{VERSION}-source/", "--output", str(source_archive), commit)
     readme = (bundle / "README.md").read_text()
     readme = readme.replace("@@BUNDLE_NAME@@", bundle.name).replace("@@MAVEN_RECORDS@@", f"{count:,}").replace("@@MAVEN_MODIFIED@@", origin["sourceLastModified"])
+    readme = readme.replace("@@RPM_RECORDS@@", f"{rpm_origin['records']:,}").replace("@@RPM_FILES@@", ", ".join("`" + item["file"] + "`" for item in rpm_origin["files"]))
     (bundle / "README.md").write_text(readme)
     manifest = {
         "applicationVersion": VERSION,
@@ -120,9 +139,10 @@ def prepare(bundle):
         "sourceCommit": commit,
         "images": images,
         "catalog": origin,
+        "rpmCatalog": rpm_origin,
         "initialCceRecords": 2,
         "initialPolicyRecords": 1,
-        "installation": "Fresh database and newly generated administrator credentials; Maven ZIP import through the admin UI",
+        "installation": "New credentials for fresh installations; existing .env and database preserved on upgrade; Maven/RPM ZIP import through the admin UI",
         "excluded": [".env", "live DB data and backups", "SSH private keys", "user accounts and scan targets", "inspection reports"],
     }
     (bundle / "VERIFICATION.md").write_text("# 배포 묶음 검증\n\n검증 결과를 기록한 후 최종 압축 파일을 생성합니다.\n")

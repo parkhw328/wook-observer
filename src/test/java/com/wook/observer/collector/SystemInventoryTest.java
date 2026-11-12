@@ -24,6 +24,25 @@ class SystemInventoryTest {
     @TempDir Path temporary;
 
     @Test
+    void collectsRpmProvenanceAndRejectsConflictingRepositoryEvidence() {
+        var parser = new SystemInventoryParser();
+        parser.accept("RPM\topenssl-libs\t1\t3.0.1\t43.el9_0\tx86_64\topenssl-3.0.1-43.el9_0.src.rpm\t(none)\tRed Hat, Inc.");
+        parser.accept("RPM_STATUS\tCOLLECTED");
+        parser.accept("RPM_REPO\trhel-9-for-x86_64-baseos-eus-rpms");
+        parser.accept("RPM_RELEASEVER\t9.4"); parser.accept("RPM_REPO_STATUS\tCOLLECTED");
+        var rpm = parser.build(new ArrayList<>()).rpm();
+        assertThat(rpm.repositoryStatus()).isEqualTo(Status.COLLECTED);
+        assertThat(rpm.releaseVersion()).isEqualTo("9.4");
+        assertThat(rpm.packages()).singleElement().satisfies(p -> {
+            assertThat(p.sourceRpm()).isEqualTo("openssl-3.0.1-43.el9_0.src.rpm");
+            assertThat(p.modularityLabel()).isEmpty();
+            assertThat(p.vendor()).isEqualTo("Red Hat, Inc.");
+        });
+        parser.accept("RPM_RELEASEVER\t9.2"); parser.accept("RPM_REPO_STATUS\tCOLLECTED");
+        assertThat(parser.build(new ArrayList<>()).rpm().repositoryStatus()).isEqualTo(Status.TRUNCATED);
+    }
+
+    @Test
     void keepsDistributionKernelAndEachInstalledPackageVersionSeparate() {
         var parser = new SystemInventoryParser();
         parser.accept(os("os_release", "ID=rhel\nVERSION_ID=9.6\n"));

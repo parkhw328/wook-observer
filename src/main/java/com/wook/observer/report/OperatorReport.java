@@ -20,7 +20,8 @@ public record OperatorReport(List<Action> actions, List<CoverageCount> coverage,
     }
     public record Action(String kind, String id, String status, String severity, String serviceGroup,
                          String packageName, String version, String title, List<Location> locations,
-                         List<String> evidence, List<String> recommendations, List<String> references, List<String> aliases) { }
+                         List<String> evidence, List<String> recommendations, List<String> references, List<String> aliases,
+                         List<String> relatedIds) { }
     public record CoverageCount(String kind, String status, String reason, int count) { }
     public record LibraryGroup(ServiceCategory category, String name, String version, String status,
                                List<String> advisories, List<String> evidence, List<Location> locations) { }
@@ -34,6 +35,11 @@ public record OperatorReport(List<Action> actions, List<CoverageCount> coverage,
         Map<String, Observation.Library> libraryByAsset = new LinkedHashMap<>();
         locations.put("host", new Location("host", null, "", ""));
         groups.put("host", "호스트");
+        report.systemInventory().rpm().packages().forEach(p -> {
+            String asset = Assessment.rpmAsset(p);
+            locations.put(asset, new Location(asset, null, "", p.nevra()));
+            groups.put(asset, "호스트 OS · RPM");
+        });
         report.containers().forEach(c -> {
             String asset = "container:" + c.id();
             locations.put(asset, new Location(asset, null, c.id(), c.name()));
@@ -120,7 +126,7 @@ public record OperatorReport(List<Action> actions, List<CoverageCount> coverage,
         final String group, name, version;
         String severity;
         final Set<Location> locations = new LinkedHashSet<>();
-        final Set<String> evidence = new LinkedHashSet<>(), recommendations = new LinkedHashSet<>(), references = new LinkedHashSet<>(), aliases = new LinkedHashSet<>();
+        final Set<String> evidence = new LinkedHashSet<>(), recommendations = new LinkedHashSet<>(), references = new LinkedHashSet<>(), aliases = new LinkedHashSet<>(), relatedIds = new LinkedHashSet<>();
         ActionBuilder(Assessment.Finding finding, String group, String name, String version) {
             this.first = finding; this.group = group; this.name = name; this.version = version; this.severity = finding.severity();
         }
@@ -128,9 +134,10 @@ public record OperatorReport(List<Action> actions, List<CoverageCount> coverage,
             locations.add(location); evidence.add(finding.evidence()); recommendations.add(finding.recommendation());
             if (!finding.reference().isBlank()) { references.add(finding.reference()); }
             aliases.addAll(finding.aliases());
+            relatedIds.addAll(finding.relatedIds());
             if (severity(finding.severity()) < severity(severity)) { severity = finding.severity(); }
         }
         Action build() { return new Action(first.kind(), first.id(), first.status(), severity, group, name, version, first.title(),
-                List.copyOf(locations), List.copyOf(evidence), List.copyOf(recommendations), List.copyOf(references), List.copyOf(aliases)); }
+                List.copyOf(locations), List.copyOf(evidence), List.copyOf(recommendations), List.copyOf(references), List.copyOf(aliases), List.copyOf(relatedIds)); }
     }
 }

@@ -63,14 +63,14 @@ class AssessorTest {
         assertThat(assess(filename, List.of(record)).assessment().findings()).singleElement().satisfies(f -> assertThat(f.status()).isEqualTo("의심"));
         var ambiguous = assess(filename, List.of(record, advisory("GHSA-other", "other.group:library")));
         assertThat(ambiguous.assessment().findings()).isEmpty();
-        assertThat(ambiguous.assessment().coverage()).singleElement().satisfies(c -> assertThat(c.reason()).isEqualTo("Maven 후보 다수"));
+        assertThat(ambiguous.assessment().coverage().stream().filter(c -> !c.kind().equals("RPM"))).singleElement().satisfies(c -> assertThat(c.reason()).isEqualTo("Maven 후보 다수"));
         var inconsistent = new Observation.Library("library", "1.4", "/library-1.5.jar", "META-INF/MANIFEST.MF", "", "");
-        assertThat(assess(inconsistent, List.of(record)).assessment().coverage()).singleElement().satisfies(c -> assertThat(c.reason()).contains("불일치"));
+        assertThat(assess(inconsistent, List.of(record)).assessment().coverage().stream().filter(c -> !c.kind().equals("RPM"))).singleElement().satisfies(c -> assertThat(c.reason()).contains("불일치"));
         var fixed = new Observation.Library("org.example:library", "2.0", "/library.jar", "Maven pom.properties", "", "");
         var safe = assess(fixed, List.of(record));
         assertThat(safe.assessment().findings()).isEmpty();
-        assertThat(safe.assessment().coverage()).singleElement().satisfies(c -> assertThat(c.status()).isEqualTo("미발견"));
-        assertThat(assess(fixed, List.of()).assessment().coverage()).singleElement().satisfies(c -> assertThat(c.status()).isEqualTo("미판정"));
+        assertThat(safe.assessment().coverage().stream().filter(c -> !c.kind().equals("RPM"))).singleElement().satisfies(c -> assertThat(c.status()).isEqualTo("미발견"));
+        assertThat(assess(fixed, List.of()).assessment().coverage().stream().filter(c -> !c.kind().equals("RPM"))).singleElement().satisfies(c -> assertThat(c.status()).isEqualTo("미판정"));
     }
 
     @Test
@@ -87,7 +87,7 @@ class AssessorTest {
             var result = new Assessor(null).assess(input, new Catalog.Snapshot(1,"",List.of(rule))).assessment();
             assertThat(result.findings()).hasSize(mode.equals("mismatch") ? 1 : 0);
             String state = switch(mode) { case "match" -> "미발견"; case "mismatch" -> "발견"; case "other" -> "비대상"; default -> "미판정"; };
-            assertThat(result.coverage()).singleElement().satisfies(c -> assertThat(c.status()).isEqualTo(state));
+            assertThat(result.coverage().stream().filter(c -> !c.kind().equals("RPM"))).singleElement().satisfies(c -> assertThat(c.status()).isEqualTo(state));
         }
     }
 
