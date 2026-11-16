@@ -115,6 +115,26 @@ class PlatformIntegrationTest {
         assertThat(detail.body()).contains("INV-01", "status.sh", "/DATA/example", "JEUS").doesNotContain("secret-fixture", "ssh_password", "private_key", "host_key");
         assertThat(json.readTree(detail.body()).path("services").get(0).path("observation_status").asText()).isEqualTo("MANUAL");
         assertThat(admin.get("/api/assets/nonexistent").statusCode()).isEqualTo(404);
+        assertThat(anonymous.binary("/api/assets/export.xlsx").statusCode()).isEqualTo(401);
+        assertThat(anonymous.binary("/api/assets/" + target + "/export.xlsx").statusCode()).isEqualTo(401);
+        assertThat(reader.binary("/api/assets/nonexistent/export.xlsx").statusCode()).isEqualTo(404);
+        for (String path : List.of("/api/assets/export.xlsx", "/api/assets/" + target + "/export.xlsx")) {
+            var exported = reader.binary(path);
+            assertThat(exported.statusCode()).isEqualTo(200);
+            assertThat(exported.headers().firstValue("Cache-Control")).contains("no-store");
+            assertThat(exported.headers().firstValue("Content-Disposition").orElseThrow()).contains("attachment", ".xlsx");
+            try (var workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook(new java.io.ByteArrayInputStream(exported.body()))) {
+                var rows = workbook.getSheet("자산 목록");
+                boolean found = false;
+                for (var row : rows) if (row.getRowNum() > 0 && row.getCell(22).getStringCellValue().equals(target)) found = true;
+                assertThat(found).isTrue();
+                if (path.contains(target)) {
+                    assertThat(rows.getLastRowNum()).isEqualTo(1);
+                    assertThat(workbook.getSheet("서비스 운영대장").getRow(1).getCell(16).getStringCellValue()).isEqualTo("status.sh");
+                }
+                for (var sheet : workbook) for (var row : sheet) for (var cell : row) assertThat(cell.toString()).doesNotContain("secret-fixture");
+            }
+        }
     }
 
     @Test

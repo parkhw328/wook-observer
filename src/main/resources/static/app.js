@@ -432,7 +432,11 @@ async function render() {
       updates: updatesView,
       users: usersView,
     }[view]();
-    if (revision === renderRevision && currentView === view) $("#content").innerHTML = html;
+    if (revision === renderRevision && currentView === view) {
+      closeAssetPopover();
+      $("#content").classList.toggle("asset-workspace", view === "assets");
+      $("#content").innerHTML = html;
+    }
   } catch (error) {
     if (revision === renderRevision) toast(error.message);
   }

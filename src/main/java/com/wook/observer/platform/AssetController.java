@@ -2,9 +2,14 @@ package com.wook.observer.platform;
 
 import org.springframework.context.annotation.Profile;
 import org.springframework.security.core.Authentication;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 
 @RestController
 @Profile("!collector")
@@ -15,6 +20,15 @@ public class AssetController {
 
     @GetMapping("/assets") public Map<String, Object> list() { return assets.list(); }
     @GetMapping("/assets/{target}") public Map<String, Object> detail(@PathVariable String target) { return assets.details(target); }
+    @GetMapping({"/assets/export.xlsx", "/assets/{target}/export.xlsx"})
+    public ResponseEntity<byte[]> export(@PathVariable(required = false) String target) throws IOException {
+        var output = new ByteArrayOutputStream();
+        assets.export(target, output);
+        return ResponseEntity.ok().contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"observer-assets.xlsx\"")
+                .body(output.toByteArray());
+    }
     @PutMapping("/admin/assets/{target}")
     public Map<String, String> profile(@PathVariable String target, @RequestBody Assets.ProfileInput input, Authentication auth) {
         assets.saveProfile(target, input, auth.getName());

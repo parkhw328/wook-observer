@@ -1,6 +1,7 @@
 package com.wook.observer.platform;
 
 import com.wook.observer.model.Observation;
+import com.wook.observer.report.AssetWorkbook;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -8,6 +9,8 @@ import org.springframework.transaction.annotation.Isolation;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Instant;
+import java.io.IOException;
+import java.io.OutputStream;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -17,6 +20,7 @@ import java.util.UUID;
 @Profile("!collector")
 public class Assets {
     private final Store store;
+    private final AssetWorkbook workbook;
     private final JsonMapper json = JsonMapper.builder().build();
     private static final String ASSET_COLUMNS = """
             SELECT t.id, t.name, t.host, t.port, t.description,
@@ -34,7 +38,7 @@ public class Assets {
             LEFT JOIN scan_job a ON a.id=(SELECT z.id FROM scan_job z WHERE z.target_id=t.id ORDER BY z.created_at DESC, z.id DESC LIMIT 1)
             """;
 
-    public Assets(Store store) { this.store = store; }
+    public Assets(Store store, AssetWorkbook workbook) { this.store = store; this.workbook = workbook; }
 
     public Map<String, Object> list() {
         var rows = store.rows(ASSET_COLUMNS + " ORDER BY t.name, t.id").stream().map(this::asset).toList();
@@ -51,7 +55,20 @@ public class Assets {
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public Map<String, Object> details(String target) {
         var row = asset(store.one(ASSET_COLUMNS + " WHERE t.id=?", target));
-        var services = store.rows("SELECT * FROM asset_service WHERE target_id=? ORDER BY archived, source, id", target);
+        return Map.of("asset", row, "services", services(row), "jobs", store.rows(
+                "SELECT id, target_id, target_name, requested_by, status, created_at, finished_at, message, finding_count FROM scan_job WHERE target_id=? ORDER BY created_at DESC, id DESC LIMIT 20", target));
+    }
+
+    /** Export saved asset data in one consistent read, without SSH access or reassessment. */
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public void export(String target, OutputStream output) throws IOException {
+        var rows = target == null ? store.rows(ASSET_COLUMNS + " ORDER BY t.name, t.id")
+                : List.of(store.one(ASSET_COLUMNS + " WHERE t.id=?", target));
+        workbook.write(rows.stream().map(this::asset).toList(), this::services, output);
+    }
+
+    private List<Map<String, Object>> services(Map<String, Object> row) {
+        var services = store.rows("SELECT * FROM asset_service WHERE target_id=? ORDER BY archived, source, id", row.get("id"));
         services.forEach(service -> {
             String observed = Store.string(service, "observed_json");
             service.remove("observed_json");
@@ -60,8 +77,7 @@ public class Assets {
             service.put("observation_status", "MANUAL".equals(service.get("source")) ? "MANUAL"
                     : service.get("last_seen_job_id").equals(row.get("job_id")) ? "OBSERVED" : "NOT_OBSERVED");
         });
-        return Map.of("asset", row, "services", services, "jobs", store.rows(
-                "SELECT id, target_id, target_name, requested_by, status, created_at, finished_at, message, finding_count FROM scan_job WHERE target_id=? ORDER BY created_at DESC, id DESC LIMIT 20", target));
+        return services;
     }
 
     private Map<String, Object> asset(Map<String, Object> row) {

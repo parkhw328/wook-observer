@@ -8,6 +8,7 @@ const assetLink = id => "#assets/" + encodeURIComponent(id);
 const options = (values, value) => Object.entries(values).map(([key, label]) => `<option value="${esc(key)}" ${key === value ? "selected" : ""}>${esc(label)}</option>`).join("");
 const filled = value => value ? esc(value) : '<span class="muted">미입력</span>';
 const memory = bytes => bytes > 0 ? (bytes / 1024 ** 3).toLocaleString("ko-KR", {maximumFractionDigits: 1}) + " GiB" : "미수집";
+const assetTime = value => value ? `<time datetime="${esc(value)}" title="${date(value)}">${esc(new Date(value).toLocaleString("sv-SE", {year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit"}))}</time>` : "관측 이력 없음";
 
 function assetKpis(summary) {
   return `<div class="kpis">
@@ -46,7 +47,7 @@ async function assetView() {
   const selected = items.filter(a => (!query || [a.name, a.host, a.asset_code, a.owner, a.location, a.purpose, a.inventory?.distribution].join(" ").toLocaleLowerCase().includes(query))
     && (!environment || (a.environment || "UNSPECIFIED") === environment)
     && (!filter || (filter === "unscanned" && !a.job_id) || (filter === "undocumented" && a.undocumented_count > 0) || (filter === "failed" && a.latest_status === "FAILED")));
-  return pageHead("자산 관리", "서버별 자산 정보와 서비스 운영대장을 함께 관리하세요.", '<a class="button" href="#targets">점검 대상 관리 →</a>') + assetKpis(summary)
+  return pageHead("자산 관리", "서버별 자산 정보와 서비스 운영대장을 함께 관리하세요.", '<button data-asset-export="" title="검색 조건과 관계없이 저장된 전체 자산·서비스를 내려받습니다.">전체 자산 XLSX</button><a class="button" href="#targets">점검 대상 관리 →</a>') + assetKpis(summary)
     + `<section class="panel"><form id="asset-search" class="asset-filters"><label>자산 검색<input name="query" maxlength="200" value="${esc(assetQuery)}" placeholder="서버·주소·자산번호·담당자"></label><label>환경<select name="environment"><option value="">전체 환경</option>${options(environments, environment)}</select></label><label>보완 상태<select name="filter">${options({"": "전체 자산", unscanned: "점검 전", undocumented: "운영 절차 보완", failed: "최근 점검 실패"}, filter)}</select></label><button type="submit">검색</button></form><div class="panel-title"><h2>자산 목록</h2><span class="small">검색 ${number(selected.length)} / 전체 ${number(items.length)}대</span></div>${assetTable(selected)}</section>`;
 }
 
@@ -63,7 +64,7 @@ function assetProfile(a) {
 
 function assetDetailHtml(data) {
   const a = data.asset, i = a.inventory;
-  return pageHead(a.name, `${a.host} · ${a.asset_code || "자산번호 미입력"}`, `<a class="button" href="#assets">자산 목록</a><button data-action="refresh-asset">새로고침</button><button class="primary" data-action="scan" data-id="${esc(a.id)}" ${["RUNNING", "QUEUED"].includes(a.latest_status) ? "disabled" : ""}>점검 시작</button>`)
+  return pageHead(a.name, `${a.host} · ${a.asset_code || "자산번호 미입력"}`, `<a class="button" href="#assets">자산 목록</a><button data-asset-export="${esc(a.id)}" title="이 자산의 저장된 전체 서비스(보관 포함)를 내려받습니다.">자산 XLSX</button><button data-action="refresh-asset">새로고침</button><button class="primary" data-action="scan" data-id="${esc(a.id)}" ${["RUNNING", "QUEUED"].includes(a.latest_status) ? "disabled" : ""}>점검 시작</button>`)
     + (a.latest_status === "FAILED" ? `<div class="note warn">최근 점검 실패 · ${esc(a.latest_message)} 기존 수집 정보는 ${date(a.observed_at)} 기준입니다.</div>` : "")
     + `<div class="asset-summary panel"><div><span class="small">수집된 호스트 / OS</span><b>${esc(i?.host.name || "미수집")}</b><span>${esc(i?.distribution || "점검 후 표시됩니다")}</span></div><div><span class="small">CPU / 메모리</span><b>${i ? (i.host.processors || "미수집") + " CPU · " + memory(i.host.physicalMemoryBytes) : "미수집"}</b><span>${esc(i?.host.architecture || "")}</span></div><div><span class="small">수집 기준 시각</span><b>${date(a.observed_at)}</b><span>${a.latest_status ? badge(a.latest_status) : "점검 전"} ${a.job_id ? `· 발견·의심 ${number(a.finding_count)}건` : ""}</span></div></div>`
     + assetProfile(a)
@@ -82,8 +83,52 @@ function serviceGrid(services) {
   return `<div class="panel-title"><p class="small">표시 ${number(items.length)} / 전체 ${number(services.length)}개 · 넓은 표는 좌우로 스크롤하세요.</p><div class="actions" aria-label="표시 컬럼"><button data-action="service-columns" data-mode="operations" aria-pressed="${serviceColumns === "operations"}">운영 절차</button><button data-action="service-columns" data-mode="all" aria-pressed="${serviceColumns === "all"}">전체 항목</button></div></div><div class="table-wrap service-grid ${serviceColumns === "operations" ? "operations" : ""}" tabindex="0" aria-label="서비스 운영대장 가로 스크롤"><table><thead><tr>${["서비스 / 분류", "SW / 버전", "담당 / 실행계정", "APP · DATA · LOG", "바인딩 포트 / 운영 포트", "시작 방법", "종료 방법", "상태 확인 방법", "연계 대상 / 메모", "관측 / 관리"].map(h => `<th scope="col">${h}</th>`).join("")}</tr></thead><tbody>${items.length ? items.map(serviceRow).join("") : '<tr><td colspan="10">표시할 서비스가 없습니다. 점검으로 후보를 수집하거나 수동 서비스를 추가하세요.</td></tr>'}</tbody></table></div>`;
 }
 
+// Display-only grouping. Original observations and service identities remain intact.
+function portGroups(bindings = []) {
+  const groups = new Map();
+  const add = (label, value) => {
+    if (!groups.has(label)) groups.set(label, new Set());
+    groups.get(label).add(value);
+  };
+  for (const raw of bindings) {
+    const socket = /^(TCP|UDP|SCTP)\s+(.+):(\d+|\*)$/i.exec(raw);
+    if (socket) { add(`${socket[1].toUpperCase()} ${socket[3]}`, raw); continue; }
+    const mapped = /^Docker (.+):(\d+) -> (\d+)\/(tcp|udp|sctp)$/i.exec(raw);
+    if (mapped) { add(`Docker ${mapped[4].toUpperCase()} ${mapped[2]} → ${mapped[3]}`, raw); continue; }
+    const docker = /^Docker (\d+)\/(tcp|udp|sctp)(?:\s+(.*))?$/i.exec(raw);
+    if (docker) {
+      const [, port, protocol, tail = ""] = docker;
+      const label = `Docker ${protocol.toUpperCase()}`;
+      if (tail.startsWith("[")) {
+        try {
+          const entries = JSON.parse(tail);
+          if (Array.isArray(entries) && entries.length && entries.every(e => typeof e?.HostIp === "string" && /^\d+$/.test(e.HostPort))) {
+            entries.forEach(e => add(`${label} ${e.HostPort} → ${port}`, `호스트 ${e.HostIp.includes(":") ? `[${e.HostIp}]` : e.HostIp}:${e.HostPort} → 컨테이너 ${port}/${protocol.toLowerCase()}`));
+            continue;
+          }
+          if (Array.isArray(entries) && !entries.length) { add(`${label} ${port} · 내부`, raw); continue; }
+        } catch (_) { /* Unknown formats remain available verbatim in the detail. */ }
+      }
+      if (!tail || tail === "null" || tail === "(컨테이너 내부)") {
+        add(`${label} ${port} · ${tail ? "내부" : "선언"}`, raw); continue;
+      }
+    }
+    add(raw.startsWith("Docker ") ? "Docker · 기타" : "기타 포트", raw);
+  }
+  return [...groups].map(([label, values]) => ({label, values: [...values]}))
+    .sort((a, b) => a.label.localeCompare(b.label, "en", {numeric: true}));
+}
+
 function observedPorts(s) {
-  return `<div class="small">자동 관측${s.observation_status === "NOT_OBSERVED" ? " · 이전 수집" : ""}</div><div class="cell-lines">${s.observed?.bindings.length ? s.observed.bindings.map(esc).join("<br>") : '<span class="muted">미확인</span>'}</div>`;
+  const ports = portGroups(s.observed?.bindings);
+  return `<div class="small">자동 관측${s.observation_status === "NOT_OBSERVED" ? " · 이전 수집" : ""}</div>${ports.length
+    ? `<button type="button" class="port-preview" data-asset-detail="ports" data-service-id="${esc(s.id)}" aria-label="자동 관측 포트 ${ports.length}종 상세" aria-expanded="false" aria-controls="asset-popover"><span class="port-chips">${ports.slice(0, 4).map(p => `<span class="port-chip">${esc(p.label)}</span>`).join("")}${ports.length > 4 ? `<span class="port-more">+${ports.length - 4}</span>` : ""}</span><span class="port-detail-hint">주소·매핑 상세</span></button>`
+    : '<span class="muted">미확인</span>'}`;
+}
+function observedPids(s) {
+  const pids = s.observed?.pids || [];
+  if (!pids.length) return "";
+  return `<button type="button" class="pid-preview" data-asset-detail="pids" data-service-id="${esc(s.id)}" aria-label="PID 전체 ${pids.length}개 보기" aria-expanded="false" aria-controls="asset-popover">PID ${pids.slice(0, 3).map(esc).join(", ")}${pids.length > 3 ? ` <span>+${pids.length - 3}</span>` : ""}</button>`;
 }
 function serviceRow(s) {
   const o = s.observed;
@@ -91,10 +136,10 @@ function serviceRow(s) {
     <td>${filled(s.software)}<div class="small">버전 ${filled(s.software_version)}</div>${o?.image ? `<div class="small">관측 이미지 ${esc(o.image)}</div>` : ""}</td>
     <td>${filled(s.owner)}<div class="small">실행 ${filled(s.run_user || o?.runUser)}</div></td>
     <td><div class="cell-lines"><span class="small">APP / 설치</span><br>${filled(s.install_path)}<br><span class="small">DATA</span><br>${filled(s.data_path)}<br><span class="small">LOG</span><br>${filled(s.log_path)}</div>${o?.executable ? `<details><summary>관측 실행 파일</summary>${esc(o.executable)}</details>` : ""}</td>
-    <td>${observedPorts(s)}<div class="small">운영 포트 / 보완</div><div class="cell-lines">${filled(s.bindings)}</div></td>
+    <td>${observedPorts(s)}${s.bindings ? `<div class="small">운영 포트 / 보완</div><div class="cell-lines">${esc(s.bindings)}</div>` : '<div class="small muted">운영 포트 미입력</div>'}</td>
     <td class="cell-lines">${filled(s.start_command)}</td><td class="cell-lines">${filled(s.stop_command)}</td><td class="cell-lines">${filled(s.status_command)}</td>
     <td><div class="small">연계 대상 / 방향</div><div class="cell-lines">${filled(s.dependencies)}</div><div class="small">메모</div><div class="cell-lines">${filled(s.notes)}</div></td>
-    <td>${badge(s.archived ? "보관" : {OBSERVED:"최근 수집 확인", NOT_OBSERVED:"최근 수집 미확인", MANUAL:"수동 등록"}[s.observation_status])}<div class="small">${s.last_seen_at ? date(s.last_seen_at) : "관측 이력 없음"}</div>${o?.pids.length ? `<div class="small">PID ${o.pids.map(number).join(", ")}</div>` : ""}${s.updated_at ? `<div class="small">수정 ${esc(s.updated_by)}<br>${date(s.updated_at)}</div>` : ""}${admin() ? `<button data-action="edit-service" data-id="${esc(s.id)}">편집</button>` : ""}</td></tr>`;
+    <td>${badge(s.archived ? "보관" : {OBSERVED:"최근 수집 확인", NOT_OBSERVED:"최근 수집 미확인", MANUAL:"수동 등록"}[s.observation_status])}<div class="small">${assetTime(s.last_seen_at)}</div>${observedPids(s)}<div class="service-row-actions">${s.updated_at ? `<span class="small" title="수정 시각 ${date(s.updated_at)}">수정 ${esc(s.updated_by)}</span>` : ""}${admin() ? `<button data-action="edit-service" data-id="${esc(s.id)}">편집</button>` : ""}</div></td></tr>`;
 }
 
 function editService(id) {
@@ -123,7 +168,8 @@ function editService(id) {
 }
 
 function setAssetBusy(busy) {
-  document.querySelectorAll('#service-search input, #service-search select, #service-search button, [data-action="refresh-asset"], [data-action="add-service"], [data-action="edit-service"], [data-action="service-columns"], #asset-profile input, #asset-profile select, #asset-profile textarea, #asset-profile button, [data-action="scan"]').forEach(el => el.disabled = busy);
+  closeAssetPopover();
+  document.querySelectorAll('#service-search input, #service-search select, #service-search button, [data-asset-export], [data-action="refresh-asset"], [data-action="add-service"], [data-action="edit-service"], [data-action="service-columns"], #asset-profile input, #asset-profile select, #asset-profile textarea, #asset-profile button, [data-action="scan"]').forEach(el => el.disabled = busy);
 }
 
 document.addEventListener("click", async event => {
@@ -172,10 +218,86 @@ document.addEventListener("input", event => {
   const form = event.target.closest("#asset-profile");
   if (form) {
     form.dataset.dirty = "true";
-    document.querySelectorAll('[data-action="refresh-asset"], [data-action="scan"], [data-action="add-service"], [data-action="edit-service"]').forEach(button => button.disabled = true);
+    document.querySelectorAll('[data-asset-export], [data-action="refresh-asset"], [data-action="scan"], [data-action="add-service"], [data-action="edit-service"]').forEach(button => button.disabled = true);
   }
 });
 function hasAssetDraft() { return !!$("tr.editing") || $("#asset-profile")?.dataset.dirty === "true"; }
 window.addEventListener("beforeunload", event => {
   if (hasAssetDraft()) { event.preventDefault(); event.returnValue = ""; }
+});
+
+let assetPopoverTrigger = null, assetPopoverTimer;
+function closeAssetPopover() {
+  clearTimeout(assetPopoverTimer);
+  assetPopoverTrigger?.setAttribute("aria-expanded", "false");
+  assetPopoverTrigger?.removeAttribute("aria-describedby");
+  assetPopoverTrigger = null;
+  const popup = $("#asset-popover");
+  if (popup) popup.hidden = true;
+}
+function openAssetPopover(trigger) {
+  const s = assetDetail?.services.find(row => row.id === trigger.dataset.serviceId);
+  if (!s) return;
+  closeAssetPopover();
+  const popup = $("#asset-popover"), pids = trigger.dataset.assetDetail === "pids";
+  popup.innerHTML = `<strong>${pids ? `PID · 전체 ${s.observed.pids.length}개` : "자동 관측 포트 · 주소·매핑"}</strong><p class="small">${esc(s.name || s.observed?.name)} · ${date(s.last_seen_at)}</p>`
+    + (pids ? `<p class="pid-values">${s.observed.pids.map(esc).join(", ")}</p>` : portGroups(s.observed?.bindings).map(p => `<div class="port-detail"><b>${esc(p.label)}</b><div class="cell-lines">${p.values.map(esc).join("\n")}</div></div>`).join(""));
+  assetPopoverTrigger = trigger; trigger.setAttribute("aria-expanded", "true"); trigger.setAttribute("aria-describedby", "asset-popover");
+  popup.hidden = false;
+  positionAssetPopover();
+}
+function positionAssetPopover() {
+  if (!assetPopoverTrigger) return;
+  if (!assetPopoverTrigger.isConnected) { closeAssetPopover(); return; }
+  const popup = $("#asset-popover"), rect = assetPopoverTrigger.getBoundingClientRect();
+  if (rect.bottom < 0 || rect.top > window.innerHeight || rect.right < 0 || rect.left > window.innerWidth) { closeAssetPopover(); return; }
+  popup.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - popup.offsetWidth - 8)) + "px";
+  popup.style.top = Math.max(8, rect.bottom + popup.offsetHeight + 8 <= window.innerHeight ? rect.bottom + 6 : rect.top - popup.offsetHeight - 6) + "px";
+}
+document.addEventListener("pointerover", event => {
+  if (event.pointerType === "touch") return;
+  const trigger = event.target.closest("[data-asset-detail]");
+  if (trigger && !trigger.contains(event.relatedTarget)) openAssetPopover(trigger);
+  if (event.target.closest("#asset-popover")) clearTimeout(assetPopoverTimer);
+});
+document.addEventListener("pointerout", event => {
+  if (event.pointerType === "touch") return;
+  const area = event.target.closest("[data-asset-detail], #asset-popover");
+  if (area && !area.contains(event.relatedTarget)) assetPopoverTimer = setTimeout(closeAssetPopover, 180);
+});
+document.addEventListener("focusin", event => {
+  const trigger = event.target.closest("[data-asset-detail]");
+  if (trigger) openAssetPopover(trigger);
+  else if (!event.target.closest("#asset-popover")) closeAssetPopover();
+});
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape") {
+    if ($("#asset-popover")?.contains(document.activeElement)) assetPopoverTrigger?.focus({preventScroll:true});
+    closeAssetPopover();
+  }
+});
+document.addEventListener("scroll", event => { if (!event.target.closest?.("#asset-popover")) positionAssetPopover(); }, true);
+window.addEventListener("resize", closeAssetPopover);
+document.addEventListener("click", async event => {
+  const trigger = event.target.closest("[data-asset-detail]");
+  if (trigger) { openAssetPopover(trigger); return; }
+  if (!event.target.closest("#asset-popover")) closeAssetPopover();
+  const button = event.target.closest("[data-asset-export]");
+  if (!button || button.disabled) return;
+  if (hasAssetDraft()) { toast("입력 내용을 저장하거나 취소한 뒤 내려받으세요."); return; }
+  button.disabled = true;
+  const label = button.textContent;
+  button.textContent = "XLSX 생성 중…";
+  try {
+    const target = button.dataset.assetExport;
+    const response = await fetch("/api/assets" + (target ? "/" + encodeURIComponent(target) : "") + "/export.xlsx");
+    if (!response.ok) throw new Error(response.status === 401 ? "다시 로그인한 뒤 내려받으세요." : "XLSX를 내려받지 못했습니다. 다시 시도하세요.");
+    const url = URL.createObjectURL(await response.blob());
+    const link = document.createElement("a");
+    link.href = url; link.download = `observer-assets-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    document.body.append(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    toast("저장된 자산·서비스 전체 항목을 내려받았습니다. 보관 항목도 포함됩니다.");
+  } catch (error) { toast(error.message); }
+  finally { button.disabled = false; button.textContent = label; }
 });

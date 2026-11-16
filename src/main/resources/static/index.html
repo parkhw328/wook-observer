@@ -5,16 +5,16 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Wook Observer · 서비스 점검</title>
     <link rel="icon" href="/observer-mark.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/app.css?v=1.6.0" />
-    <script defer src="/app.js?v=1.6.0"></script>
-    <script defer src="/assets.js?v=1.6.0"></script>
+    <link rel="stylesheet" href="/app.css?v=1.7.0" />
+    <script defer src="/app.js?v=1.7.0"></script>
+    <script defer src="/assets.js?v=1.7.0"></script>
   </head>
   <body>
     <div class="app-layout">
       <aside class="sidebar">
-        <a class="brand" href="#overview" aria-label="Wook Observer 대시보드">
+        <a class="brand" href="#overview" aria-label="Observer 대시보드">
           <img class="brand-icon" src="/observer-mark.svg" width="48" height="48" alt="" />
-          <span class="brand-name"><span>wook</span><strong>observer</strong></span>
+          <span class="brand-name">Observer</span>
         </a>
         <p class="nav-label">WORKSPACE</p>
         <nav aria-label="주 메뉴">
@@ -34,7 +34,7 @@
         </nav>
         <div class="sidebar-bottom">
           <span class="dot"></span> 내부망 점검 플랫폼
-          <p>Wook Observer <b>1.6.0</b></p>
+          <p>Wook Observer <b>1.7.0</b></p>
         </div>
       </aside>
       <div class="main-shell">
@@ -54,6 +54,7 @@
       </div>
     </div>
     <div id="toast" role="status" aria-live="polite" hidden></div>
+    <div id="asset-popover" class="asset-popover" role="tooltip" tabindex="0" hidden></div>
     <dialog id="modal">
       <div id="modal-content"></div>
       <button id="modal-close" class="quiet">닫기</button>
