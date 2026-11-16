@@ -176,12 +176,8 @@ nav a.active { background: #fff0e5; color: #a64209; box-shadow: inset 3px 0 var(
   margin-top: auto;
   padding: 24px 12px 0;
   color: #776d63;
-  font-size: 16px;
-}
-.sidebar-bottom p {
   font-size: 14px;
-  margin: 12px 0 0;
-  color: #8b8177;
+  white-space: nowrap;
 }
 .dot {
   display: inline-block;
@@ -617,11 +613,6 @@ dialog #modal-close {
   font-size: 17px;
   line-height: 1.7;
 }
-footer {
-  padding: 20px 36px 25px;
-  color: #79736b;
-  font-size: 14px;
-}
 .login-body {
   background: #fff;
 }
@@ -930,13 +921,14 @@ button[aria-pressed="true"] { background: #fff0e5; border-color: var(--brand); c
 .port-chip { display: inline-block; padding: 2px 6px; border: 1px solid #e3e7eb; border-radius: 4px; background: #f3f6f8; font-size: 12px; color: #384957; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .port-more { font-size: 12px; padding: 2px 4px; color: var(--accent); }
 .port-detail-hint { display: block; font-size: 11px; color: var(--muted); margin-top: 4px; }
-.asset-workspace .pid-preview { display: block; max-width: 100%; white-space: normal; border: 0; border-bottom: 1px dotted #b8afa6; border-radius: 0; padding: 2px 0; margin: 6px 0; background: transparent; font-size: 12px; font-weight: 400; color: var(--muted); text-align: left; }
+.asset-workspace .pid-preview { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; max-width: 100%; white-space: normal; border: 0; border-bottom: 1px dotted #b8afa6; border-radius: 0; padding: 2px 0; margin: 6px 0; background: transparent; font-size: 12px; font-weight: 400; color: var(--muted); text-align: left; }
 .service-row-actions { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.pid-preview span { color: var(--accent); white-space: nowrap; }
+.pid-chip { display: inline-block; padding: 1px 4px; border: 1px solid #e3e7eb; border-radius: 4px; background: #f3f6f8; color: #384957; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pid-preview .pid-more { color: var(--accent); white-space: nowrap; }
 .port-preview:focus-visible, .pid-preview:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
 .asset-popover { position: fixed; z-index: 20; width: max-content; max-width: min(460px, calc(100vw - 16px)); max-height: min(420px, calc(100vh - 32px)); overflow: auto; padding: 14px 16px; border: 1px solid #d8d1c9; border-radius: 8px; background: #fff; box-shadow: 0 8px 28px #25262926; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
 .asset-popover .small { font-size: 12px; margin: 4px 0 10px; }
-.asset-popover .pid-values { max-width: 420px; margin: 0; font-variant-numeric: tabular-nums; }
+.asset-popover .pid-values { display: flex; flex-wrap: wrap; gap: 4px; max-width: 420px; margin: 0; }
 .port-detail + .port-detail { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
 .port-detail b { color: #384957; }
 @media (max-width: 740px) {

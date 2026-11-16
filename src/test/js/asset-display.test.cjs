@@ -35,9 +35,33 @@ test('bounds the visible port list and escapes unknown evidence and identifiers'
   assert.ok(html.includes('+4'));
   assert.ok(!html.includes('8007') && !html.includes('<img>') && !html.includes('0.0.0.0'));
 });
-test('shows only three PIDs and the remaining count without thousands separators', () => {
+test('shows three separate PID badges and the remaining count without commas', () => {
   const html = context.observedPids({id:'one', observed:{pids:[12345,23456,34567,45678,56789]}});
-  assert.ok(html.includes('PID 12345, 23456, 34567'));
+  assert.equal((html.match(/class="pid-chip"/g) || []).length, 3);
+  assert.ok(['12345','23456','34567'].every(pid => html.includes('>'+pid+'</span>')));
+  assert.ok(!html.includes(','));
   assert.ok(html.includes('+2') && !html.includes('45678') && !html.includes('56789'));
   assert.equal(context.observedPids({id:'manual'}), '');
+});
+
+const service = (name, executable = '', extra = {}) => ({source:'AUTO', observed:{kind:'PROCESS', name, executable, pids:[12345], runUser:'root', bindings:['TCP 0.0.0.0:22']}, ...extra});
+test('recognizes observed OS services and named kernel threads without changing their data', () => {
+  for (const item of [service('sshd','/usr/sbin/sshd'),service('systemd-resolve','/usr/lib/systemd/systemd-resolved'),
+    service('chronyd','/sbin/chronyd (deleted)'),service('rpcbind'),service('[nfsd]'),service('kworker/u8:3-events'),service('kernel'),
+    {...service('sshd','/usr/sbin/sshd'),name:'관리자가 지정한 이름'}]) {
+    const before = JSON.stringify(item);
+    assert.equal(context.isSystemService(item),true,item.observed.name);
+    assert.equal(JSON.stringify(item),before);
+  }
+});
+test('retains business services, containers, manual entries and unidentified sockets', () => {
+  const manual = service('sshd','/usr/sbin/sshd',{source:'MANUAL'});
+  const container = service('sshd'); container.observed.kind='CONTAINER';
+  const socket = service('kernel'); socket.observed.kind='SOCKET'; socket.observed.pids=[];
+  for (const item of [manual, container, socket, {source:'MANUAL',name:'systemd'}, service('sshd','/APP/sshd'),
+    service('sshd','/usr/bin/company-agent'),service('systemd-helper','/usr/bin/systemd-helper'),service('kernel-api'),
+    service('nginx','/usr/sbin/nginx'),service('prometheus','/usr/bin/prometheus'),service('grafana'),service('postgres'),
+    service('unknown'),{observed:{name:'systemd'}}]) {
+    assert.equal(context.isSystemService(item),false,JSON.stringify(item));
+  }
 });

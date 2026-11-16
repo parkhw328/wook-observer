@@ -3,7 +3,7 @@ const environments = {UNSPECIFIED: "미지정", PRODUCTION: "운영", STAGING: "
 const lifecycles = {ACTIVE: "운영", MAINTENANCE: "유지보수", RETIRED: "폐기·사용 종료"};
 const serviceTypes = {OTHER: "미분류", MIDDLEWARE: "미들웨어", APPLICATION: "애플리케이션", COMMON: "공통·보안·백업"};
 let assetQuery = "", assetEnvironment = "", assetFilter = "", assetDetail = null;
-let serviceQuery = "", serviceFilter = "active", serviceColumns = "operations", editingService = null;
+let serviceQuery = "", serviceFilter = "active", serviceColumns = "operations", excludeSystemServices = false, editingService = null;
 const assetLink = id => "#assets/" + encodeURIComponent(id);
 const options = (values, value) => Object.entries(values).map(([key, label]) => `<option value="${esc(key)}" ${key === value ? "selected" : ""}>${esc(label)}</option>`).join("");
 const filled = value => value ? esc(value) : '<span class="muted">미입력</span>';
@@ -36,7 +36,7 @@ async function assetView() {
   if (target) {
     const data = await api("/assets/" + encodeURIComponent(target));
     if (revision === renderRevision) {
-      if (assetDetail?.asset.id !== target) { serviceQuery = ""; serviceFilter = "active"; }
+      if (assetDetail?.asset.id !== target) { serviceQuery = ""; serviceFilter = "active"; excludeSystemServices = false; }
       assetDetail = data;
       editingService = null;
     }
@@ -74,13 +74,34 @@ function assetDetailHtml(data) {
     + `<section class="panel"><div class="panel-title"><h2>이 자산의 최근 점검</h2><span class="small">최근 20회 · 당시 보고서 보존</span></div>${jobsTable(data.jobs)}</section>`;
 }
 
+// A display filter based on observed identity, never on a handwritten label, port number or root ownership.
+const systemProcessNames = new Set([
+  "init", "systemd", "systemd-resolved", "systemd-networkd", "systemd-timesyncd", "systemd-journald", "systemd-udevd", "systemd-logind",
+  "systemd-resolve", "systemd-network", "systemd-timesyn", "systemd-journal", // Linux comm may be truncated.
+  "sshd", "chronyd", "ntpd", "rpcbind", "rpc.statd", "rpc.mountd", "rpc.idmapd", "rpc.gssd", "rpc.nfsd",
+  "avahi-daemon", "dhclient", "dhcpcd", "networkmanager", "cupsd", "cups-browsed",
+]);
+function isSystemService(service) {
+  const observed = service.observed;
+  if (service.source !== "AUTO" || observed?.kind !== "PROCESS") return false;
+  const executable = (observed.executable || "").trim().replace(/ \(deleted\)$/, "");
+  const name = (observed.name || "").trim().toLowerCase();
+  if (!executable) {
+    return systemProcessNames.has(name) || /^\[?(?:kernel|kthreadd|kworker(?:[/:][^\]]+)?|ksoftirqd\/\d+|migration\/\d+|watchdog\/\d+|rcu_(?:sched|bh|preempt)|kswapd\d*|kcompactd\d*|khugepaged|kthrotld|nfsd|lockd|rpciod|xprtiod)\]?$/.test(name);
+  }
+  // A business executable with a similar name under /APP or /opt remains visible.
+  return /^(?:\/(?:usr\/)?(?:s?bin)\/|\/(?:usr\/)?lib(?:64)?\/systemd\/)[^/]+$/.test(executable)
+    && systemProcessNames.has(executable.slice(executable.lastIndexOf("/") + 1).toLowerCase());
+}
 function serviceGrid(services) {
   const query = serviceQuery.toLocaleLowerCase();
-  const items = services.filter(s => (serviceFilter === "all" || (serviceFilter === "archived" ? s.archived : !s.archived))
+  const matching = services.filter(s => (serviceFilter === "all" || (serviceFilter === "archived" ? s.archived : !s.archived))
     && (serviceFilter !== "undocumented" || !s.start_command || !s.stop_command || !s.status_command)
     && (serviceFilter !== "unobserved" || s.observation_status === "NOT_OBSERVED")
     && (!query || [s.name, s.owner, s.software, s.bindings, s.install_path, s.data_path, s.log_path, s.observed?.name, s.observed?.bindings.join(" ")].join(" ").toLocaleLowerCase().includes(query)));
-  return `<div class="panel-title"><p class="small">표시 ${number(items.length)} / 전체 ${number(services.length)}개 · 넓은 표는 좌우로 스크롤하세요.</p><div class="actions" aria-label="표시 컬럼"><button data-action="service-columns" data-mode="operations" aria-pressed="${serviceColumns === "operations"}">운영 절차</button><button data-action="service-columns" data-mode="all" aria-pressed="${serviceColumns === "all"}">전체 항목</button></div></div><div class="table-wrap service-grid ${serviceColumns === "operations" ? "operations" : ""}" tabindex="0" aria-label="서비스 운영대장 가로 스크롤"><table><thead><tr>${["서비스 / 분류", "SW / 버전", "담당 / 실행계정", "APP · DATA · LOG", "바인딩 포트 / 운영 포트", "시작 방법", "종료 방법", "상태 확인 방법", "연계 대상 / 메모", "관측 / 관리"].map(h => `<th scope="col">${h}</th>`).join("")}</tr></thead><tbody>${items.length ? items.map(serviceRow).join("") : '<tr><td colspan="10">표시할 서비스가 없습니다. 점검으로 후보를 수집하거나 수동 서비스를 추가하세요.</td></tr>'}</tbody></table></div>`;
+  const items = excludeSystemServices ? matching.filter(s => !isSystemService(s)) : matching;
+  const hidden = matching.length - items.length;
+  return `<div class="panel-title"><p class="small" role="status">표시 ${number(items.length)} / 전체 ${number(services.length)}개${excludeSystemServices ? ` · 시스템 서비스 ${number(hidden)}개 제외` : ""} · 넓은 표는 좌우로 스크롤하세요.</p><div class="actions" aria-label="컬럼과 서비스 표시"><button type="button" data-action="service-columns" data-mode="operations" aria-pressed="${serviceColumns === "operations"}">운영 절차</button><button type="button" data-action="service-columns" data-mode="all" aria-pressed="${serviceColumns === "all"}">전체 항목</button><button type="button" data-action="toggle-system-services" aria-pressed="${excludeSystemServices}" aria-controls="service-ledger" title="커널·systemd·SSH·시간 동기화 등 확인 가능한 OS 기본 서비스를 숨깁니다. 다시 누르면 표시합니다.">시스템 서비스 항목 제외</button></div></div><div id="service-ledger" class="table-wrap service-grid ${serviceColumns === "operations" ? "operations" : ""}" tabindex="0" aria-label="서비스 운영대장 가로 스크롤"><table><thead><tr>${["서비스 / 분류", "SW / 버전", "담당 / 실행계정", "APP · DATA · LOG", "바인딩 포트 / 운영 포트", "시작 방법", "종료 방법", "상태 확인 방법", "연계 대상 / 메모", "관측 / 관리"].map(h => `<th scope="col">${h}</th>`).join("")}</tr></thead><tbody>${items.length ? items.map(serviceRow).join("") : `<tr><td colspan="10">${hidden ? "시스템 서비스 제외를 해제하면 숨긴 항목을 볼 수 있습니다." : "표시할 서비스가 없습니다. 검색 조건을 바꾸거나 수동 서비스를 추가하세요."}</td></tr>`}</tbody></table></div>`;
 }
 
 // Display-only grouping. Original observations and service identities remain intact.
@@ -125,10 +146,13 @@ function observedPorts(s) {
     ? `<button type="button" class="port-preview" data-asset-detail="ports" data-service-id="${esc(s.id)}" aria-label="자동 관측 포트 ${ports.length}종 상세" aria-expanded="false" aria-controls="asset-popover"><span class="port-chips">${ports.slice(0, 4).map(p => `<span class="port-chip">${esc(p.label)}</span>`).join("")}${ports.length > 4 ? `<span class="port-more">+${ports.length - 4}</span>` : ""}</span><span class="port-detail-hint">주소·매핑 상세</span></button>`
     : '<span class="muted">미확인</span>'}`;
 }
+function pidChips(pids) {
+  return pids.map(pid => `<span class="pid-chip">${esc(pid)}</span>`).join(" ");
+}
 function observedPids(s) {
   const pids = s.observed?.pids || [];
   if (!pids.length) return "";
-  return `<button type="button" class="pid-preview" data-asset-detail="pids" data-service-id="${esc(s.id)}" aria-label="PID 전체 ${pids.length}개 보기" aria-expanded="false" aria-controls="asset-popover">PID ${pids.slice(0, 3).map(esc).join(", ")}${pids.length > 3 ? ` <span>+${pids.length - 3}</span>` : ""}</button>`;
+  return `<button type="button" class="pid-preview" data-asset-detail="pids" data-service-id="${esc(s.id)}" aria-label="PID 전체 ${pids.length}개 보기" aria-expanded="false" aria-controls="asset-popover"><span>PID</span> ${pidChips(pids.slice(0, 3))}${pids.length > 3 ? ` <span class="pid-more">+${pids.length - 3}</span>` : ""}</button>`;
 }
 function serviceRow(s) {
   const o = s.observed;
@@ -169,7 +193,7 @@ function editService(id) {
 
 function setAssetBusy(busy) {
   closeAssetPopover();
-  document.querySelectorAll('#service-search input, #service-search select, #service-search button, [data-asset-export], [data-action="refresh-asset"], [data-action="add-service"], [data-action="edit-service"], [data-action="service-columns"], #asset-profile input, #asset-profile select, #asset-profile textarea, #asset-profile button, [data-action="scan"]').forEach(el => el.disabled = busy);
+  document.querySelectorAll('#service-search input, #service-search select, #service-search button, [data-asset-export], [data-action="refresh-asset"], [data-action="add-service"], [data-action="edit-service"], [data-action="service-columns"], [data-action="toggle-system-services"], #asset-profile input, #asset-profile select, #asset-profile textarea, #asset-profile button, [data-action="scan"]').forEach(el => el.disabled = busy);
 }
 
 document.addEventListener("click", async event => {
@@ -183,7 +207,14 @@ document.addEventListener("click", async event => {
   if (button.dataset.action === "refresh-asset") await render();
   if (button.dataset.action === "cancel-profile") { $("#asset-profile").dataset.dirty = "false"; await render(); }
   if (button.dataset.action === "service-columns") {
+    closeAssetPopover();
     serviceColumns = button.dataset.mode; $("#service-grid").innerHTML = serviceGrid(assetDetail.services);
+  }
+  if (button.dataset.action === "toggle-system-services") {
+    closeAssetPopover();
+    excludeSystemServices = !excludeSystemServices;
+    $("#service-grid").innerHTML = serviceGrid(assetDetail.services);
+    $("[data-action='toggle-system-services']").focus({preventScroll: true});
   }
 });
 
@@ -242,7 +273,7 @@ function openAssetPopover(trigger, pinned = false) {
   closeAssetPopover();
   const popup = $("#asset-popover"), pids = trigger.dataset.assetDetail === "pids";
   popup.innerHTML = `<strong>${pids ? `PID · 전체 ${s.observed.pids.length}개` : "자동 관측 포트 · 주소·매핑"}</strong><p class="small">${esc(s.name || s.observed?.name)} · ${date(s.last_seen_at)}</p>`
-    + (pids ? `<p class="pid-values">${s.observed.pids.map(esc).join(", ")}</p>` : portGroups(s.observed?.bindings).map(p => `<div class="port-detail"><b>${esc(p.label)}</b><div class="cell-lines">${p.values.map(esc).join("\n")}</div></div>`).join(""));
+    + (pids ? `<p class="pid-values">${pidChips(s.observed.pids)}</p>` : portGroups(s.observed?.bindings).map(p => `<div class="port-detail"><b>${esc(p.label)}</b><div class="cell-lines">${p.values.map(esc).join("\n")}</div></div>`).join(""));
   assetPopoverTrigger = trigger; trigger.setAttribute("aria-expanded", "true"); trigger.setAttribute("aria-describedby", "asset-popover");
   assetPopoverPinned = pinned;
   popup.hidden = false;
