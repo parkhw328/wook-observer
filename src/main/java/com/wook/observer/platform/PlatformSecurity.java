@@ -26,17 +26,28 @@ public class PlatformSecurity {
     SecurityFilterChain platformChain(HttpSecurity http, Accounts accounts) throws Exception {
         DaoAuthenticationProvider provider = new DaoAuthenticationProvider(accounts);
         provider.setPasswordEncoder(new BCryptPasswordEncoder(12));
-        http.authenticationProvider(provider)
+        // Use the configured BCrypt provider without falling back to an auto-configured encoder.
+        http.authenticationManager(new org.springframework.security.authentication.ProviderManager(java.util.List.of(provider)))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/", "/index.html", "/app.css", "/app.js", "/assets.js", "/login.html", "/login.js", "/observer-mark.svg", "/icons.svg", "/fonts/**", "/api/session", "/actuator/health", "/error").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().denyAll())
                 .formLogin(form -> form.loginPage("/login.html").loginProcessingUrl("/api/login")
-                        .successHandler((request, response, authentication) -> response.setStatus(204))
-                        .failureHandler((request, response, exception) -> response.sendError(401, "로그인 정보를 확인하세요.")).permitAll())
+                        .successHandler((request, response, authentication) -> {
+                            org.slf4j.MDC.put("actor", authentication.getName());
+                            OperationLog.info("auth.login.succeeded", "clientIp", request.getRemoteAddr());
+                            response.setStatus(204);
+                        })
+                        .failureHandler((request, response, exception) -> {
+                            OperationLog.warn("auth.login.failed", "clientIp", request.getRemoteAddr(), "reason", exception.getClass().getSimpleName());
+                            response.sendError(401, "로그인 정보를 확인하세요.");
+                        }).permitAll())
                 .logout(logout -> logout.logoutUrl("/api/logout")
-                        .logoutSuccessHandler((request, response, authentication) -> response.setStatus(204)))
+                        .logoutSuccessHandler((request, response, authentication) -> {
+                            if (authentication != null) org.slf4j.MDC.put("actor", authentication.getName());
+                            OperationLog.info("auth.logout"); response.setStatus(204);
+                        }))
                 .exceptionHandling(errors -> errors.authenticationEntryPoint((request, response, exception) -> response.sendError(401)))
                 .headers(headers -> headers.contentSecurityPolicy(csp -> csp.policyDirectives(
                         "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")))
@@ -53,8 +64,10 @@ public class PlatformSecurity {
                 throws ServletException, IOException {
             var auth = SecurityContextHolder.getContext().getAuthentication();
             if (auth != null && auth.getPrincipal() instanceof Accounts.Account original) {
+                org.slf4j.MDC.put("actor", original.username());
                 Accounts.Account current = (Accounts.Account) accounts.loadUserByUsername(original.username());
                 if (!current.enabled() || current.revision() != original.revision()) {
+                    OperationLog.warn("auth.session.revoked", "enabled", current.enabled(), "revision", current.revision());
                     if (request.getSession(false) != null) { request.getSession(false).invalidate(); }
                     SecurityContextHolder.clearContext();
                     response.sendError(401, "계정이 변경되었습니다. 다시 로그인하세요.");

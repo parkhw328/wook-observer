@@ -22,8 +22,10 @@ public class AssetController {
     @GetMapping("/assets/{target}") public Map<String, Object> detail(@PathVariable String target) { return assets.details(target); }
     @GetMapping({"/assets/export.xlsx", "/assets/{target}/export.xlsx"})
     public ResponseEntity<byte[]> export(@PathVariable(required = false) String target) throws IOException {
+        long started = System.nanoTime();
         var output = new ByteArrayOutputStream();
         assets.export(target, output);
+        OperationLog.info("asset.exported", "targetId", target == null ? "ALL" : target, "format", "xlsx", "bytes", output.size(), "durationMs", OperationLog.elapsed(started));
         return ResponseEntity.ok().contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
                 .header(HttpHeaders.CACHE_CONTROL, "no-store")
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"observer-assets.xlsx\"")

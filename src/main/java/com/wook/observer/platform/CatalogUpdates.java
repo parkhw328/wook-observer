@@ -39,6 +39,7 @@ public class CatalogUpdates {
         String next = next(settings.cron(), settings.zone());
         store.jdbc.update("UPDATE update_schedule SET enabled = ?, cron = ?, zone = ?, source = ?, next_run = ? WHERE singleton = 1",
                 settings.enabled(), settings.cron(), settings.zone(), settings.source(), settings.enabled() ? next : null);
+        OperationLog.info("catalog.schedule.configured", "enabled", settings.enabled(), "source", OperationLog.source(settings.source()), "nextRun", settings.enabled() ? next : "disabled");
     }
 
     @Scheduled(fixedDelay = 30000, initialDelay = 30000)
@@ -50,19 +51,24 @@ public class CatalogUpdates {
         int claimed = store.jdbc.update("UPDATE update_schedule SET next_run = ? WHERE singleton = 1 AND next_run = ?",
                 next(Store.string(row, "cron"), Store.string(row, "zone")), due);
         if (claimed == 1) {
+            OperationLog.info("catalog.schedule.triggered", "due", due);
             try { runNow(); } catch (ApiProblem ignored) { /* Failure is persisted and visible to administrators. */ }
         }
     }
 
     public synchronized Map<String, Object> runNow() {
         String source = Store.string(settings(), "source");
+        long timer = System.nanoTime();
+        OperationLog.info("catalog.source.loading", "source", OperationLog.source(source));
         byte[] data;
         try { data = load(source); }
         catch (Exception e) {
+            OperationLog.failure("catalog.source.failed", e, "source", OperationLog.source(source), "durationMs", OperationLog.elapsed(timer));
             String message = "업데이트 원본을 읽지 못했습니다. 반입 파일·미러 허용 호스트·인증서·64MiB 제한을 확인하세요.";
             catalog.recordFailure(source, message);
             throw new ApiProblem(400, message);
         }
+        OperationLog.info("catalog.source.loaded", "source", OperationLog.source(source), "bytes", data.length, "durationMs", OperationLog.elapsed(timer));
         return catalog.importBytes(data, source);
     }
 

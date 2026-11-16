@@ -21,7 +21,7 @@ docker run --rm --pull never --network none --read-only --cap-drop ALL --securit
     printf "OBSERVER_ADMIN_USER=admin\n"
     printf "OBSERVER_ADMIN_PASSWORD=%s\n" "$initial_admin_password"
     printf "OBSERVER_ENCRYPTION_KEY=%s\n" "$credential_key"
-    printf "OBSERVER_BIND_ADDRESS=127.0.0.1\nOBSERVER_PORT=18080\nOBSERVER_MIRROR_HOSTS=\nCOOKIE_SECURE=false\n"
+    printf "OBSERVER_BIND_ADDRESS=127.0.0.1\nOBSERVER_PORT=18080\nOBSERVER_MIRROR_HOSTS=\nCOOKIE_SECURE=false\nOBSERVER_LOG_LEVEL=INFO\n"
   ' > "$env_temporary"
 # Hard-link creation is atomic and refuses to replace a concurrently created .env.
 ln "$env_temporary" "$bundle_root/.env" || fail '.env가 이미 생겼거나 생성할 수 없습니다. 기존 파일은 변경하지 않았습니다.'

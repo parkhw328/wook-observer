@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Wook Observer · 서비스 점검</title>
     <link rel="icon" href="/observer-mark.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/app.css?v=1.7.0" />
-    <script defer src="/app.js?v=1.7.0"></script>
-    <script defer src="/assets.js?v=1.7.0"></script>
+    <link rel="stylesheet" href="/app.css?v=1.8.0" />
+    <script defer src="/app.js?v=1.8.0"></script>
+    <script defer src="/assets.js?v=1.8.0"></script>
   </head>
   <body>
     <div class="app-layout">
@@ -34,18 +34,18 @@
         </nav>
         <div class="sidebar-bottom">
           <span class="dot"></span> 내부망 점검 플랫폼
-          <p>Wook Observer <b>1.7.0</b></p>
+          <p>Wook Observer <b>1.8.0</b></p>
         </div>
       </aside>
       <div class="main-shell">
         <header class="topbar">
-          <span id="breadcrumb">워크스페이스 / 대시보드</span>
+          <h1 id="breadcrumb">워크스페이스 / 대시보드</h1>
           <div>
             <span id="account"></span
             ><button id="logout" class="quiet">로그아웃</button>
           </div>
         </header>
-        <main id="content" tabindex="-1">
+        <main id="content" tabindex="-1" aria-labelledby="breadcrumb">
           <p>워크스페이스를 불러오는 중입니다…</p>
         </main>
         <footer>

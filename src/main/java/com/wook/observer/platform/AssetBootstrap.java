@@ -14,12 +14,15 @@ public class AssetBootstrap implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
+        long started = System.nanoTime();
         // Upgrade existing installations one snapshot at a time, without rescanning or reassessing reports.
-        for (var row : store.rows("""
+        var rows = store.rows("""
                 SELECT j.id FROM scan_job j WHERE j.status='COMPLETED' AND j.report_json IS NOT NULL
                 AND j.id=(SELECT z.id FROM scan_job z WHERE z.target_id=j.target_id AND z.status='COMPLETED'
                     ORDER BY z.created_at DESC, z.id DESC LIMIT 1)
                 AND NOT EXISTS (SELECT 1 FROM asset_inventory i WHERE i.target_id=j.target_id AND i.job_id=j.id)
-                """)) assets.backfill(Store.string(row, "id"));
+                """);
+        for (var row : rows) assets.backfill(Store.string(row, "id"));
+        OperationLog.info("asset.backfill.completed", "assets", rows.size(), "durationMs", OperationLog.elapsed(started));
     }
 }

@@ -11,6 +11,11 @@ spring:
     multipart:
       max-file-size: 64MB
       max-request-size: 65MB
+logging:
+  level:
+    com.wook.observer: ${OBSERVER_LOG_LEVEL:INFO}
+  pattern:
+    level: "%5p [requestId=%X{requestId:-} actor=%X{actor:-} jobId=%X{jobId:-} targetId=%X{targetId:-}]"
 server:
   address: 127.0.0.1
   port: 8080

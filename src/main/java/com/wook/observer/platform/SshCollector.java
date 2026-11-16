@@ -32,11 +32,18 @@ public class SshCollector {
 
     public Observation collect(Map<String, Object> target) throws Exception {
         Instant started = Instant.now();
+        long timer = System.nanoTime();
         var report = parse(new SshTransport(targets, Path.of(askpass)).collect(target));
         if (!Store.string(target, "privilege_mode").isEmpty() && !"NONE".equals(Store.string(target, "privilege_mode"))
                 && !"0".equals(report.facts().get("host:effective_uid"))) {
             throw new ApiProblem(502, "root 권한을 확인하지 못했습니다. 점검 결과를 저장하지 않았습니다.");
         }
+        var system = report.systemInventory();
+        OperationLog.info("ssh.inventory.parsed", "durationMs", OperationLog.elapsed(timer), "processes", report.processes().size(),
+                "jvms", report.javaProcesses().size(), "containers", report.containers().size(), "rpmStatus", system.rpm().status(),
+                "rpmPackages", system.rpm().packages().size(), "socketStatus", system.sockets().status(), "sockets", system.sockets().entries().size(), "issues", report.issues().size());
+        if (!report.issues().isEmpty()) OperationLog.warn("ssh.inventory.partial", "issues", report.issues().size());
+        OperationLog.debug("ssh.inventory.scope", "rpmStatus", system.rpm().status(), "socketStatus", system.sockets().status());
         return new Observation(report.version(), started, report.host(), report.processes(), report.javaProcesses(), report.containers(), report.issues(), report.facts(), null, report.systemInventory());
     }
 
@@ -139,7 +146,7 @@ public class SshCollector {
         String scope = isolated ? "SSH 컨테이너 네임스페이스" : "SSH Linux 호스트";
         scope += facts.containsKey("host:effective_uid") ? " / 실행 계정 " + facts.get("host:effective_user") + " (UID " + facts.get("host:effective_uid") + ")" : " (계정 접근 범위)";
         var inventory = system.build(issues);
-        return new Observation("1.7.0", Instant.now(), new Observation.Host(host[1], "Linux", host[2], host[3], Integer.parseInt(host[4]),
+        return new Observation("1.8.0", Instant.now(), new Observation.Host(host[1], "Linux", host[2], host[3], Integer.parseInt(host[4]),
                 (long) Double.parseDouble(host[5]), scope, dockerVersion), linked, java, containers, issues, facts, null, inventory);
     }
 }

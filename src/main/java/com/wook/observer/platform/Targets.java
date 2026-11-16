@@ -73,6 +73,7 @@ public class Targets {
             store.jdbc.update("UPDATE scan_target SET name = ?, host = ?, port = ?, ssh_user = ?, private_key = ?, host_key = ?, description = ?, auth_type = ?, ssh_password = ?, key_passphrase = ?, privilege_mode = ?, privilege_password = ? WHERE id = ?",
                     input.name().strip(), input.host(), input.port(), input.sshUser(), key, hostKey, input.description(), auth, password, passphrase, privilege, elevationPassword, id);
         }
+        OperationLog.info("target.saved", "targetId", id, "actor", actor, "operation", create ? "CREATE" : "UPDATE", "authType", auth, "privilegeMode", privilege);
         return id;
     }
 

@@ -104,6 +104,7 @@ public class Assets {
             store.jdbc.update("UPDATE asset_profile SET asset_code=?, environment=?, owner=?, location=?, purpose=?, lifecycle=?, notes=?, revision=revision+1, updated_by=?, updated_at=? WHERE target_id=?",
                     code, input.environment(), owner, location, purpose, input.lifecycle(), notes, actor, Instant.now().toString(), target);
         }
+        OperationLog.afterCommit("asset.profile.saved", "targetId", target, "actor", actor, "revision", revision + 1);
     }
 
     @Transactional
@@ -132,6 +133,8 @@ public class Assets {
                     notes=?, archived=?, revision=revision+1, updated_by=?, updated_at=? WHERE id=? AND target_id=?
                 """, name, bindings, owner, software, version, runUser, input.serviceType(), installPath, dataPath, logPath, start, stop, status,
                 dependencies, notes, input.archived(), actor, Instant.now().toString(), id, target);
+        OperationLog.afterCommit("asset.service.saved", "targetId", target, "serviceId", id, "actor", actor,
+                "operation", create ? "CREATE" : "UPDATE", "archived", input.archived(), "revision", input.revision() + 1);
         return id;
     }
 

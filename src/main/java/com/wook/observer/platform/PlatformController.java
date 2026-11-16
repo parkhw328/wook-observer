@@ -33,7 +33,7 @@ public class PlatformController {
     @GetMapping("/session")
     public Map<String, Object> session(Authentication auth, CsrfToken csrf) {
         String role = auth == null ? "" : auth.getAuthorities().stream().findFirst().map(Object::toString).orElse("").replace("ROLE_", "");
-        return Map.of("username", auth == null ? "" : auth.getName(), "role", role, "csrf", csrf.getToken(), "csrfHeader", csrf.getHeaderName(), "version", "1.7.0");
+        return Map.of("username", auth == null ? "" : auth.getName(), "role", role, "csrf", csrf.getToken(), "csrfHeader", csrf.getHeaderName(), "version", "1.8.0");
     }
     @GetMapping("/targets") public List<Map<String, Object>> targets() { return targets.list(); }
     @GetMapping("/admin/targets/{id}") public Map<String, Object> target(@PathVariable String id) {
@@ -53,6 +53,7 @@ public class PlatformController {
     }
     @GetMapping("/jobs/{id}/download/{format}")
     public ResponseEntity<byte[]> download(@PathVariable String id, @PathVariable String format) throws IOException {
+        long started = System.nanoTime();
         var report = jobs.report(id);
         byte[] bytes;
         String type;
@@ -63,6 +64,7 @@ public class PlatformController {
             case "md" -> { bytes = reports.documents(report).get("summary.md").getBytes(java.nio.charset.StandardCharsets.UTF_8); type = "text/markdown;charset=UTF-8"; }
             default -> throw new ApiProblem(400, "지원 형식: xlsx, zip, json, md");
         }
+        OperationLog.info("report.downloaded", "jobId", id, "format", format, "bytes", bytes.length, "durationMs", OperationLog.elapsed(started));
         return ResponseEntity.ok().contentType(MediaType.parseMediaType(type)).header(HttpHeaders.CACHE_CONTROL, "no-store")
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"wook-observer-" + id + "." + format + "\"").body(bytes);
     }

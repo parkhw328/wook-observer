@@ -217,6 +217,7 @@ nav a.active { background: #fff0e5; color: #a64209; box-shadow: inset 3px 0 var(
   color: var(--ink);
   font-weight: 600;
 }
+#breadcrumb { margin: 0; font: inherit; letter-spacing: normal; }
 main#content {
   max-width: 1500px;
   margin: auto;
@@ -237,8 +238,10 @@ main#content {
   color: var(--muted);
   line-height: 1.7;
 }
-.page-head h1 {
+.page-head .entity-title {
   margin: 0;
+  font-size: 30px;
+  line-height: 1.4;
 }
 .head-actions,
 .actions {
@@ -875,8 +878,8 @@ label small { font-size: 16px; }
 
 /* Asset ledgers use the full workspace and a denser, scoped type scale. */
 main#content.asset-workspace { max-width: none; padding: 24px 20px; font-size: 14px; line-height: 1.5; }
-.asset-workspace h1 { font-size: 28px; }
 .asset-workspace h2 { font-size: 19px; }
+.asset-workspace .entity-title { font-size: 28px; }
 .asset-workspace .page-head { margin-bottom: 18px; gap: 12px; }
 .asset-workspace .eyebrow { font-size: 11px; margin-bottom: 6px; }
 .asset-workspace .small, .asset-workspace .kpi small { font-size: 12px; line-height: 1.5; }
@@ -939,7 +942,7 @@ button[aria-pressed="true"] { background: #fff0e5; border-color: var(--brand); c
 @media (max-width: 740px) {
   main#content.asset-workspace { padding: 16px 12px; }
   .asset-workspace .panel { padding: 12px; }
-  .asset-workspace h1 { font-size: 24px; }
+  .asset-workspace .entity-title { font-size: 24px; }
   .service-grid th:first-child, .service-grid td:first-child { position: static; }
   .asset-filters label { flex-basis: 100%; }
 }

@@ -64,7 +64,7 @@ function assetProfile(a) {
 
 function assetDetailHtml(data) {
   const a = data.asset, i = a.inventory;
-  return pageHead(a.name, `${a.host} · ${a.asset_code || "자산번호 미입력"}`, `<a class="button" href="#assets">자산 목록</a><button data-asset-export="${esc(a.id)}" title="이 자산의 저장된 전체 서비스(보관 포함)를 내려받습니다.">자산 XLSX</button><button data-action="refresh-asset">새로고침</button><button class="primary" data-action="scan" data-id="${esc(a.id)}" ${["RUNNING", "QUEUED"].includes(a.latest_status) ? "disabled" : ""}>점검 시작</button>`)
+  return pageHead(a.name, `${a.host} · ${a.asset_code || "자산번호 미입력"}`, `<a class="button" href="#assets">자산 목록</a><button data-asset-export="${esc(a.id)}" title="이 자산의 저장된 전체 서비스(보관 포함)를 내려받습니다.">자산 XLSX</button><button data-action="refresh-asset">새로고침</button><button class="primary" data-action="scan" data-id="${esc(a.id)}" ${["RUNNING", "QUEUED"].includes(a.latest_status) ? "disabled" : ""}>점검 시작</button>`, true)
     + (a.latest_status === "FAILED" ? `<div class="note warn">최근 점검 실패 · ${esc(a.latest_message)} 기존 수집 정보는 ${date(a.observed_at)} 기준입니다.</div>` : "")
     + `<div class="asset-summary panel"><div><span class="small">수집된 호스트 / OS</span><b>${esc(i?.host.name || "미수집")}</b><span>${esc(i?.distribution || "점검 후 표시됩니다")}</span></div><div><span class="small">CPU / 메모리</span><b>${i ? (i.host.processors || "미수집") + " CPU · " + memory(i.host.physicalMemoryBytes) : "미수집"}</b><span>${esc(i?.host.architecture || "")}</span></div><div><span class="small">수집 기준 시각</span><b>${date(a.observed_at)}</b><span>${a.latest_status ? badge(a.latest_status) : "점검 전"} ${a.job_id ? `· 발견·의심 ${number(a.finding_count)}건` : ""}</span></div></div>`
     + assetProfile(a)
@@ -226,16 +226,17 @@ window.addEventListener("beforeunload", event => {
   if (hasAssetDraft()) { event.preventDefault(); event.returnValue = ""; }
 });
 
-let assetPopoverTrigger = null, assetPopoverTimer;
+let assetPopoverTrigger = null, assetPopoverTimer, assetPopoverPinned = false;
 function closeAssetPopover() {
   clearTimeout(assetPopoverTimer);
   assetPopoverTrigger?.setAttribute("aria-expanded", "false");
   assetPopoverTrigger?.removeAttribute("aria-describedby");
   assetPopoverTrigger = null;
+  assetPopoverPinned = false;
   const popup = $("#asset-popover");
   if (popup) popup.hidden = true;
 }
-function openAssetPopover(trigger) {
+function openAssetPopover(trigger, pinned = false) {
   const s = assetDetail?.services.find(row => row.id === trigger.dataset.serviceId);
   if (!s) return;
   closeAssetPopover();
@@ -243,6 +244,7 @@ function openAssetPopover(trigger) {
   popup.innerHTML = `<strong>${pids ? `PID · 전체 ${s.observed.pids.length}개` : "자동 관측 포트 · 주소·매핑"}</strong><p class="small">${esc(s.name || s.observed?.name)} · ${date(s.last_seen_at)}</p>`
     + (pids ? `<p class="pid-values">${s.observed.pids.map(esc).join(", ")}</p>` : portGroups(s.observed?.bindings).map(p => `<div class="port-detail"><b>${esc(p.label)}</b><div class="cell-lines">${p.values.map(esc).join("\n")}</div></div>`).join(""));
   assetPopoverTrigger = trigger; trigger.setAttribute("aria-expanded", "true"); trigger.setAttribute("aria-describedby", "asset-popover");
+  assetPopoverPinned = pinned;
   popup.hidden = false;
   positionAssetPopover();
 }
@@ -251,17 +253,22 @@ function positionAssetPopover() {
   if (!assetPopoverTrigger.isConnected) { closeAssetPopover(); return; }
   const popup = $("#asset-popover"), rect = assetPopoverTrigger.getBoundingClientRect();
   if (rect.bottom < 0 || rect.top > window.innerHeight || rect.right < 0 || rect.left > window.innerWidth) { closeAssetPopover(); return; }
+  // Keep the popup away from its trigger: covering it during focus can cancel a touch click.
+  popup.style.maxHeight = "";
+  const below = Math.max(0, window.innerHeight - rect.bottom - 14), above = Math.max(0, rect.top - 14);
+  const placeBelow = below >= popup.offsetHeight || below >= above;
+  popup.style.maxHeight = Math.min(popup.offsetHeight, placeBelow ? below : above) + "px";
   popup.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - popup.offsetWidth - 8)) + "px";
-  popup.style.top = Math.max(8, rect.bottom + popup.offsetHeight + 8 <= window.innerHeight ? rect.bottom + 6 : rect.top - popup.offsetHeight - 6) + "px";
+  popup.style.top = Math.max(8, placeBelow ? rect.bottom + 6 : rect.top - popup.offsetHeight - 6) + "px";
 }
 document.addEventListener("pointerover", event => {
-  if (event.pointerType === "touch") return;
+  if (event.pointerType === "touch" || assetPopoverPinned) return;
   const trigger = event.target.closest("[data-asset-detail]");
   if (trigger && !trigger.contains(event.relatedTarget)) openAssetPopover(trigger);
   if (event.target.closest("#asset-popover")) clearTimeout(assetPopoverTimer);
 });
 document.addEventListener("pointerout", event => {
-  if (event.pointerType === "touch") return;
+  if (event.pointerType === "touch" || assetPopoverPinned) return;
   const area = event.target.closest("[data-asset-detail], #asset-popover");
   if (area && !area.contains(event.relatedTarget)) assetPopoverTimer = setTimeout(closeAssetPopover, 180);
 });
@@ -277,10 +284,10 @@ document.addEventListener("keydown", event => {
   }
 });
 document.addEventListener("scroll", event => { if (!event.target.closest?.("#asset-popover")) positionAssetPopover(); }, true);
-window.addEventListener("resize", closeAssetPopover);
+window.addEventListener("resize", positionAssetPopover);
 document.addEventListener("click", async event => {
   const trigger = event.target.closest("[data-asset-detail]");
-  if (trigger) { openAssetPopover(trigger); return; }
+  if (trigger) { openAssetPopover(trigger, true); return; }
   if (!event.target.closest("#asset-popover")) closeAssetPopover();
   const button = event.target.closest("[data-asset-export]");
   if (!button || button.disabled) return;

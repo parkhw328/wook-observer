@@ -1,10 +1,15 @@
 name: wook-observer-offline
 services:
   app:
-    image: wook-observer:1.7.0
+    image: wook-observer:1.8.0
     platform: linux/amd64
     pull_policy: never
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     init: true
     ports:
       - "${OBSERVER_BIND_ADDRESS:-127.0.0.1}:${OBSERVER_PORT:-18080}:8080"
@@ -17,6 +22,7 @@ services:
       OBSERVER_ENCRYPTION_KEY: ${OBSERVER_ENCRYPTION_KEY:?Set the credential encryption key}
       OBSERVER_UPDATE_DIRECTORY: /app/updates
       OBSERVER_MIRROR_HOSTS: ${OBSERVER_MIRROR_HOSTS:-}
+      OBSERVER_LOG_LEVEL: ${OBSERVER_LOG_LEVEL:-INFO}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
     volumes:
       - ./updates:/app/updates:ro
@@ -40,6 +46,11 @@ services:
     platform: linux/amd64
     pull_policy: never
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     environment:
       POSTGRES_DB: observer
       POSTGRES_USER: observer

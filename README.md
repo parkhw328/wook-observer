@@ -2,7 +2,7 @@
 
 등록 서버의 자산 정보와 서비스 운영대장을 관리하고, **실행 프로세스 → JVM·라이브러리 → Docker 컨테이너** 점검 이력·명세·취약점 대조 결과를 연결하는 내부망 웹서비스입니다.
 
-현재 버전은 **1.7.0**입니다. 중앙 서비스는 Spring Boot 4.1.2 / Java 21.0.13 이상 / PostgreSQL 18로 구성하고 Docker Compose로 실행합니다. 대상 Linux 서버는 SSH로 연결하므로 **Java를 새로 설치할 필요가 없습니다.**
+현재 버전은 **1.8.0**입니다. 중앙 서비스는 Spring Boot 4.1.2 / Java 21.0.13 이상 / PostgreSQL 18로 구성하고 Docker Compose로 실행합니다. 대상 Linux 서버는 SSH로 연결하므로 **Java를 새로 설치할 필요가 없습니다.**
 
 ## Docker로 시작하기
 
@@ -120,7 +120,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s src/test/python
 # 자산 포트 요약·PID 표시 회귀 검사 (개발 PC의 Node.js 18 이상)
 node --test src/test/js/*.test.cjs
 # DB 없이 로컬 서버를 한 번 점검하고 종료
-java -jar target/wook-observer-1.7.0.jar --observer.report-dir=./reports/check-001
+java -jar target/wook-observer-1.8.0.jar --observer.report-dir=./reports/check-001
 ```
 
 일회성 CLI는 기존 로컬 수집기를 유지하며 취약점 DB 대조를 수행하지 않습니다(`미실시`). CLI XLSX는 34개 시트입니다. 출력 디렉터리는 새 경로여야 합니다.
@@ -131,17 +131,19 @@ java -jar target/wook-observer-1.7.0.jar --observer.report-dir=./reports/check-0
 
 ## 폐쇄망 배포와 백업
 
-1.7.0은 자산 화면의 포트/PID 요약, 넓은 표와 작은 글자, 자산·서비스 XLSX 다운로드와 Observer 로고를 제공합니다. 목록의 **전체 자산 XLSX**, 서버 상세의 **자산 XLSX**로 저장된 전체 항목(보관 포함)을 내려받습니다. 화면 검색/필터와 저장 전 입력은 내보내기에 적용되지 않습니다.
+1.8.0은 자산 화면의 포트/PID 요약, 넓은 표와 작은 글자, 자산·서비스 XLSX 다운로드와 Observer 로고를 제공합니다. 메뉴명은 상단에만 표시하고 본문의 중복 제목을 제거했습니다. 목록의 **전체 자산 XLSX**, 서버 상세의 **자산 XLSX**로 저장된 전체 항목(보관 포함)을 내려받습니다. 화면 검색/필터와 저장 전 입력은 내보내기에 적용되지 않습니다.
 
-기존 설치에서는 같은 Compose 프로젝트와 DB 볼륨, 기존 `.env`를 유지해 업데이트합니다. 1.6.0에서 DB 스키마 변경은 없으며, 1.5.0 이하에서는 V4 마이그레이션으로 자산 관리 테이블을 추가하고 이전 점검 결과를 초기 자산 정보에 연결합니다. 자세한 절차는 아래 설치 안내를 따르세요.
+점검·SSH 수집·판정·자산 변경·카탈로그 갱신·다운로드의 결과와 소요 시간을 기본 INFO 로그로 기록합니다. 요청 ID를 비동기 점검까지 연결하고 비밀번호·키·명령 본문·예외 메시지는 제외합니다. `.env`의 `OBSERVER_LOG_LEVEL=DEBUG`로 일반 API 조회와 예외 코드 위치를 추가할 수 있습니다. 앱/DB 로그는 파일당 10 MiB·5개로 회전합니다. 조회 명령과 이벤트는 [운영 로그 안내](docs/operations-logging.md)를 참고하세요.
+
+기존 설치에서는 같은 Compose 프로젝트와 DB 볼륨, 기존 `.env`를 유지해 업데이트합니다. 1.6.0/1.7.0에서 DB 스키마 변경은 없으며, 1.5.0 이하에서는 V4 마이그레이션으로 자산 관리 테이블을 추가하고 이전 점검 결과를 초기 자산 정보에 연결합니다. 자세한 절차는 아래 설치 안내를 따르세요.
 
 **Linux x86_64(amd64), Docker Engine·Compose 설치 완료** 환경용 반입 묶음을 제공합니다. 앱·PostgreSQL 이미지 전체, Maven·RPM 취약점 ZIP, CCE/정책 JSON, 설정·운영 스크립트, SHA-256과 소스 스냅샷을 포함합니다. 반입 서버에는 Java·Maven·Python·OpenSSL을 설치할 필요가 없습니다. 실행 절차는 묶음의 `README.md`를 따르며 원본은 [폐쇄망 설치 안내](deployment/offline/README.md)입니다.
 
 ```bash
 # 반입 서버: 함께 제공한 두 파일의 이름을 사용
-sha256sum -c wook-observer-1.7.0-linux-amd64-YYYYMMDD.tar.gz.sha256
-tar -xzf wook-observer-1.7.0-linux-amd64-YYYYMMDD.tar.gz
-cd wook-observer-1.7.0-linux-amd64-YYYYMMDD
+sha256sum -c wook-observer-1.8.0-linux-amd64-YYYYMMDD.tar.gz.sha256
+tar -xzf wook-observer-1.8.0-linux-amd64-YYYYMMDD.tar.gz
+cd wook-observer-1.8.0-linux-amd64-YYYYMMDD
 ./install.sh
 # 새 .env에서 관리자 비밀번호와 접속 주소·포트 확인
 ./start.sh
@@ -149,13 +151,13 @@ cd wook-observer-1.7.0-linux-amd64-YYYYMMDD
 
 `install.sh`는 파일 무결성 확인, `docker load`, 새 자격 증명 생성을 수행합니다. 오프라인 Compose에는 빌드 항목이 없으며 `pull_policy: never`와 `--pull never`로 실행합니다. 로그인 후 **데이터 업데이트**에서 `maven-osv.zip`과 `rpm-*.zip` 파일을 차례로 반영하세요. 파일별 원본 이름을 설정해 즉시 갱신하거나 파일 업로드를 사용할 수 있습니다. 기존 PC의 DB·계정·SSH 키·보고서는 반입 묶음에 넣지 않습니다.
 
-새 묶음을 만드는 **준비 PC에서만** Python 3.11 이상과 Docker가 필요합니다. `v1.7.0`과 일치하는 `wook-observer:1.7.0`, `postgres:18.6-bookworm`의 amd64 이미지 및 `updates/maven-osv.zip`·`updates/rpm-*.zip`·각 manifest를 먼저 준비한 뒤 아래를 실행하세요. 이미지 내보내기에 `docker image save --platform`을 지원하는 Docker가 필요합니다.
+새 묶음을 만드는 **준비 PC에서만** Python 3.11 이상과 Docker가 필요합니다. `v1.8.0`과 일치하는 `wook-observer:1.8.0`, `postgres:18.6-bookworm`의 amd64 이미지 및 `updates/maven-osv.zip`·`updates/rpm-*.zip`·각 manifest를 먼저 준비한 뒤 아래를 실행하세요. 이미지 내보내기에 `docker image save --platform`을 지원하는 Docker가 필요합니다.
 
 ```bash
-python3 scripts/package-offline.py --output resources/offline/wook-observer-1.7.0-linux-amd64-YYYYMMDD
+python3 scripts/package-offline.py --output resources/offline/wook-observer-1.8.0-linux-amd64-YYYYMMDD
 # 생성 디렉터리의 별도 복사본에서 설치·기동·데이터 반영 검증
 # 원본 디렉터리의 VERIFICATION.md에 결과 기록 (.env 생성 금지)
-python3 scripts/package-offline.py --output resources/offline/wook-observer-1.7.0-linux-amd64-YYYYMMDD --archive-only
+python3 scripts/package-offline.py --output resources/offline/wook-observer-1.8.0-linux-amd64-YYYYMMDD --archive-only
 ```
 
 최종 `.tar.gz`와 `.tar.gz.sha256`은 `resources/offline/`에 생성되며 Git에 추가하지 않습니다. 동일 버전의 앱 이미지를 다시 포장할 때는 앱 태그를 유지하고 `PACKAGE-MANIFEST.json`에 묶음 개정·생성 시각·이미지/데이터 해시를 기록합니다. 소스 스냅샷만으로 폐쇄망에서 재빌드하려면 별도의 Maven 의존성 반입이 필요합니다.

@@ -40,12 +40,95 @@ class PlatformIntegrationTest {
     @Autowired CatalogUpdates updates;
     @Autowired SecretVault vault;
     @Autowired Targets targets;
+    @Autowired org.springframework.transaction.PlatformTransactionManager transactionManager;
     @MockitoBean SshCollector ssh;
     @TempDir static Path updateDirectory;
     private final JsonMapper json = JsonMapper.builder().build();
 
     @DynamicPropertySource
     static void updatePath(DynamicPropertyRegistry registry) { registry.add("observer.platform.update-directory", () -> updateDirectory.toString()); }
+
+    @Test
+    void operationalLogsTraceAsyncJobsAndExcludeCredentialsBodiesAndQueryStrings() throws Exception {
+        try (var log = new OperationLogCapture(ch.qos.logback.classic.Level.INFO)) {
+            Client admin = login("admin", "Init1234");
+            log.events.clear();
+            var read = admin.get("/api/targets?query=query-secret-canary");
+            assertThat(read.headers().firstValue("X-Request-ID")).isPresent();
+            assertThat(log.text()).doesNotContain("http.completed");
+            log.logger.setLevel(ch.qos.logback.classic.Level.DEBUG);
+            var request = HttpRequest.newBuilder(uri("/api/targets?query=query-secret-canary")).header("X-Request-ID", "untrusted-id-canary").GET().build();
+            var response = admin.http.send(request, HttpResponse.BodyHandlers.ofString());
+            String requestId = response.headers().firstValue("X-Request-ID").orElseThrow();
+            assertThat(requestId).matches("[0-9a-f-]{36}").isNotEqualTo(read.headers().firstValue("X-Request-ID").orElseThrow());
+            assertThat(log.events).anySatisfy(event -> {
+                assertThat(event.getFormattedMessage()).contains("event=http.completed", "route=/api/targets", "status=200", "durationMs=");
+                assertThat(event.getMDCPropertyMap()).containsEntry("requestId", requestId).containsEntry("actor", "admin").doesNotContainKey("jobId");
+            });
+            String secret = "ssh-password-canary";
+            var created = admin.send("POST", "/api/admin/targets", Map.of("name", "logging-fixture", "host", "127.0.0.1", "port", 22,
+                    "sshUser", "observer", "authType", "PASSWORD", "sshPassword", secret, "privilegeMode", "NONE",
+                    "hostKey", "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4f", "description", ""), true);
+            assertThat(created.statusCode()).isEqualTo(200);
+            String target = json.readTree(created.body()).path("id").asText();
+            var profile = Map.of("assetCode", "", "environment", "TEST", "owner", "", "location", "", "purpose", "", "lifecycle", "ACTIVE", "notes", "notes-canary", "revision", 0);
+            assertThat(admin.send("PUT", "/api/admin/assets/" + target, profile, true).statusCode()).isEqualTo(200);
+            var service = new Assets.ServiceInput("test-service", "", "", "", "", "", "OTHER", "", "", "", "command-secret-canary", "", "", "", "", false, 0);
+            assertThat(admin.send("POST", "/api/admin/assets/" + target + "/services", service, true).statusCode()).isEqualTo(200);
+            when(ssh.collect(anyMap())).thenReturn(ReportFixtures.sample());
+            var started = admin.send("POST", "/api/targets/" + target + "/scans", Map.of(), true);
+            String job = json.readTree(started.body()).path("id").asText();
+            String scanRequest = started.headers().firstValue("X-Request-ID").orElseThrow();
+            awaitLog(log, "scan.completed", job);
+            assertThat(log.events.stream().filter(e -> job.equals(e.getMDCPropertyMap().get("jobId"))).toList()).hasSizeGreaterThanOrEqualTo(5)
+                    .allSatisfy(e -> assertThat(e.getMDCPropertyMap()).containsEntry("requestId", scanRequest).containsEntry("actor", "admin").containsEntry("targetId", target));
+            assertThat(admin.binary("/api/assets/" + target + "/export.xlsx").statusCode()).isEqualTo(200);
+            assertThat(admin.binary("/api/jobs/" + job + "/download/json").statusCode()).isEqualTo(200);
+            when(ssh.collect(anyMap())).thenThrow(new IllegalStateException("exception-secret-canary"));
+            var failed = admin.send("POST", "/api/targets/" + target + "/scans", Map.of(), true);
+            String failedJob = json.readTree(failed.body()).path("id").asText();
+            awaitLog(log, "scan.failed", failedJob);
+            assertThat(log.events).anySatisfy(event -> {
+                assertThat(event.getFormattedMessage()).contains("event=scan.failed", "phase=COLLECTION", "durationMs=", "errorType=IllegalStateException");
+                assertThat(event.getMDCPropertyMap()).containsEntry("jobId", failedJob).containsEntry("requestId", failed.headers().firstValue("X-Request-ID").orElseThrow());
+            });
+            var invalid = HttpRequest.newBuilder(uri("/api/admin/targets")).header("X-CSRF-TOKEN", admin.csrf).header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString("{\"sshPassword\":\"malformed-secret-canary\",invalid}")).build();
+            assertThat(admin.http.send(invalid, HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(400);
+            assertThat(new Client().get("/api/targets").statusCode()).isEqualTo(401);
+            assertThat(admin.send("POST", "/api/admin/targets", Map.of("sshPassword", secret), false).statusCode()).isEqualTo(403);
+            Client denied = new Client(); denied.refresh();
+            var badLogin = HttpRequest.newBuilder(uri("/api/login")).header("X-CSRF-TOKEN", denied.csrf).header("Content-Type", "application/x-www-form-urlencoded")
+                    .POST(HttpRequest.BodyPublishers.ofString("username=admin&password=login-secret-canary")).build();
+            assertThat(denied.http.send(badLogin, HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(401);
+            assertThat(log.text()).contains("asset.profile.saved", "asset.service.saved", "asset.exported", "report.downloaded", "api.invalid_input", "status=401", "status=403")
+                    .contains("auth.login.failed", "reason=BadCredentialsException")
+                    .doesNotContain(secret, "Init1234", "query-secret-canary", "untrusted-id-canary", "notes-canary", "command-secret-canary", "exception-secret-canary", "malformed-secret-canary", "login-secret-canary");
+        }
+    }
+
+    @Test
+    void committedChangesLogOnceAndRolledBackChangesNeverClaimSuccess() {
+        var tx = new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+        try (var log = new OperationLogCapture(ch.qos.logback.classic.Level.INFO)) {
+            tx.executeWithoutResult(status -> { OperationLog.afterCommit("test.saved", "operation", "rollback"); status.setRollbackOnly(); });
+            assertThat(log.text()).doesNotContain("test.saved");
+            tx.executeWithoutResult(status -> {
+                OperationLog.afterCommit("test.saved", "operation", "commit");
+                assertThat(log.text()).doesNotContain("test.saved");
+            });
+            assertThat(log.events).hasSize(1);
+            assertThat(log.text()).contains("event=test.saved operation=commit");
+        }
+    }
+
+    private void awaitLog(OperationLogCapture log, String event, String job) throws InterruptedException {
+        for (int i = 0; i < 200; i++) {
+            if (log.events.stream().anyMatch(e -> e.getFormattedMessage().contains("event=" + event + " ") && job.equals(e.getMDCPropertyMap().get("jobId")))) return;
+            Thread.sleep(25);
+        }
+        fail("Missing operational event " + event);
+    }
 
     @Test
     void authenticationCsrfRolesAndSessionRevocationAreEnforced() throws Exception {

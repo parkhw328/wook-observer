@@ -55,10 +55,10 @@ async function api(path, options = {}) {
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
     throw new Error(
-      error.message ||
+      (error.message ||
         (response.status === 403
           ? "접근 권한 또는 로그인 유효 시간을 확인하세요."
-          : `요청 실패 (${response.status})`),
+          : `요청 실패 (${response.status})`)) + (error.requestId ? ` (요청 ID: ${error.requestId})` : ""),
     );
   }
   return response.status === 204 ? null : response.json();
@@ -82,8 +82,8 @@ function badge(state) {
         : "info";
   return `<span class="badge ${type}">${esc(labels[state] || state)}</span>`;
 }
-function pageHead(title, description, action = "") {
-  return `<div class="page-head"><div><p class="eyebrow">WORKSPACE / ${esc(currentView.toUpperCase())}</p><h1>${esc(title)}</h1><p>${esc(description)}</p></div><div class="head-actions">${action}</div></div>`;
+function pageHead(title, description, action = "", showEntityTitle = false) {
+  return `<div class="page-head"><div>${showEntityTitle ? `<h2 class="entity-title">${esc(title)}</h2>` : ""}<p>${esc(description)}</p></div><div class="head-actions">${action}</div></div>`;
 }
 function empty(title, description, action = "") {
   return `<div class="empty"><b>${esc(title)}</b><p>${esc(description)}</p>${action}</div>`;
@@ -149,6 +149,7 @@ async function targetForm(id) {
   $("#content").innerHTML = pageHead(
     id ? "대상 연결 설정" : "새 점검 대상 등록",
     "서버 주소와 접속 정보를 입력하세요. 등록할 때 서버 지문을 자동으로 조회합니다.",
+    "", true,
   ) + `<section class="panel connection-panel"><form id="target-form" data-id="${esc(id || "")}" data-auth="${esc(target.auth_type || "")}" data-privilege="${esc(target.privilege_mode || "")}" data-has-key="${!!target.hasPrivateKey}" data-has-password="${!!target.hasSshPassword}" data-has-privilege="${!!target.hasPrivilegePassword}" data-host-confirmed="${!!target.host_key}">
     <fieldset><legend><span class="step-number">01</span> 서버 연결</legend>
     <div class="grid"><label>대상 이름<input name="name" required maxlength="120" value="${esc(target.name)}" placeholder="예: 주문 서비스 운영 서버"></label>

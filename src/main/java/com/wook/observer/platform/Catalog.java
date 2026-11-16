@@ -100,16 +100,19 @@ public class Catalog {
                        boolean hasPrevious, boolean hasNext) { }
 
     public synchronized Map<String, Object> importBytes(byte[] bytes, String source) {
+        long timer = System.nanoTime();
         String run = UUID.randomUUID().toString();
         String started = Instant.now().toString();
         source = source == null ? "upload" : source.substring(0, Math.min(500, source.length()));
         String origin = source;
+        OperationLog.info("catalog.import.started", "runId", run, "source", OperationLog.source(source), "bytes", bytes.length);
         try {
             if (bytes.length == 0 || bytes.length > MAX_UPLOAD) { throw new ApiProblem(400, "카탈로그 파일은 1바이트~64MiB이어야 합니다."); }
             List<JsonNode> records = read(bytes);
             if (records.isEmpty()) { throw new ApiProblem(400, "가져올 CVE/CCE 레코드가 없습니다."); }
             // Validate the entire archive before touching the active catalog.
             records.forEach(this::validate);
+            OperationLog.debug("catalog.import.validated", "runId", run, "records", records.size());
             String digest = sha256(bytes);
             transactions.executeWithoutResult(status -> {
                 store.jdbc.queryForObject("SELECT revision FROM catalog_state WHERE singleton = 1 FOR UPDATE", Integer.class);
@@ -132,8 +135,10 @@ public class Catalog {
                 store.jdbc.update("INSERT INTO update_run(id, started_at, source, status, record_count, message, sha256, catalog_revision) VALUES (?, ?, ?, 'SUCCESS', ?, ?, ?, ?)",
                         run, started, origin, records.size(), "검증 후 반영; 이전 수정 시각 레코드는 유지", digest, revision);
             });
+            OperationLog.info("catalog.import.completed", "runId", run, "records", records.size(), "sha256", digest, "durationMs", OperationLog.elapsed(timer));
             return Map.of("id", run, "records", records.size(), "sha256", digest, "message", "카탈로그 반영 완료");
         } catch (Exception e) {
+            OperationLog.failure("catalog.import.failed", e, "runId", run, "durationMs", OperationLog.elapsed(timer));
             String message = e instanceof ApiProblem ? e.getMessage() : "카탈로그 형식 또는 저장 오류. 기존 카탈로그를 유지했습니다.";
             recordFailure(run, started, origin, message);
             throw new ApiProblem(400, message);

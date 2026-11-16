@@ -13,8 +13,21 @@ import java.util.Map;
 @Profile("!collector")
 public class PlatformErrors {
     @ExceptionHandler(ApiProblem.class)
-    public ResponseEntity<Map<String, String>> problem(ApiProblem problem) { return ResponseEntity.status(problem.status).body(Map.of("message", problem.getMessage())); }
+    public ResponseEntity<Map<String, String>> problem(ApiProblem problem) {
+        OperationLog.failure("api.rejected", problem);
+        return ResponseEntity.status(problem.status).body(Map.of("message", problem.getMessage()));
+    }
 
     @ExceptionHandler({HttpMessageNotReadableException.class, IllegalArgumentException.class, MaxUploadSizeExceededException.class})
-    public ResponseEntity<Map<String, String>> invalid(Exception exception) { return ResponseEntity.badRequest().body(Map.of("message", "입력 형식과 파일 크기를 확인하세요.")); }
+    public ResponseEntity<Map<String, String>> invalid(Exception exception) {
+        OperationLog.warn("api.invalid_input", "errorType", exception.getClass().getSimpleName());
+        return ResponseEntity.badRequest().body(Map.of("message", "입력 형식과 파일 크기를 확인하세요."));
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<Map<String, String>> unexpected(Exception exception) {
+        OperationLog.failure("api.failed", exception);
+        return ResponseEntity.internalServerError().body(Map.of("message", "처리 중 오류가 발생했습니다. 관리자에게 요청 ID를 전달하세요.",
+                "requestId", java.util.Objects.toString(org.slf4j.MDC.get("requestId"), "")));
+    }
 }

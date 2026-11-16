@@ -69,6 +69,7 @@ public class Accounts implements UserDetailsService, ApplicationRunner {
         }
         store.jdbc.update("INSERT INTO app_user(username, password_hash, role, enabled, created_at) VALUES (?, ?, ?, ?, ?)",
                 username, passwords.encode(password), role, enabled, Instant.now().toString());
+        OperationLog.info("account.created", "username", username, "role", role, "enabled", enabled);
     }
 
     public synchronized void update(String username, String password, String role, boolean enabled) {
@@ -85,6 +86,7 @@ public class Accounts implements UserDetailsService, ApplicationRunner {
             store.jdbc.update("UPDATE app_user SET password_hash = ?, role = ?, enabled = ?, revision = revision + 1 WHERE username = ?",
                     hash, role, enabled, username);
         });
+        OperationLog.info("account.updated", "username", username, "role", role, "enabled", enabled, "passwordChanged", password != null && !password.isBlank());
     }
 
     private void validateRole(String role) {
