@@ -872,3 +872,35 @@ label small { font-size: 16px; }
 .report-section > summary { cursor: pointer; font-weight: 700; font-size: 20px; margin-bottom: 14px; }
 #modal-content td { overflow-wrap: anywhere; }
 .catalog-pager { flex-wrap: wrap; }
+
+.asset-filters { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin-bottom: 24px; }
+.asset-filters label { flex: 1 1 160px; margin: 0; }
+.asset-filters label:first-child { flex: 2 1 260px; }
+.asset-filters button { min-height: 50px; }
+.asset-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 24px; }
+.asset-summary > div { display: flex; flex-direction: column; overflow-wrap: anywhere; }
+.asset-summary b { margin: 6px 0; }
+.asset-profile > summary { cursor: pointer; font-weight: 700; }
+.service-grid { max-height: 760px; border: 1px solid var(--line); border-radius: 8px; }
+.service-grid table { min-width: 2580px; table-layout: fixed; }
+.service-grid th { position: sticky; top: 0; z-index: 2; }
+.service-grid th:first-child, .service-grid td:first-child { position: sticky; left: 0; background: #fffaf5; z-index: 1; width: 240px; border-right: 1px solid var(--line); }
+.service-grid th:first-child { z-index: 3; }
+.service-grid td { vertical-align: top; }
+.service-grid td:last-child { min-width: 200px; }
+.cell-lines { white-space: pre-wrap; overflow-wrap: anywhere; }
+.service-grid .small { margin-top: 8px; }
+.service-grid label { font-size: 16px; margin: 8px 0 16px; }
+.service-grid textarea { min-height: 90px; padding: 10px; font-size: 16px; }
+.service-grid .editing { background: #fffcf8; }
+.service-grid .editing td { border-top: 2px solid var(--brand); border-bottom: 2px solid var(--brand); }
+.service-edit button { margin: 6px 4px 6px 0; }
+.service-grid.operations table { min-width: 1200px; }
+.service-grid.operations th:first-child, .service-grid.operations td:first-child { width: 200px; }
+.service-grid.operations :is(th, td):is(:nth-child(2), :nth-child(3), :nth-child(4), :nth-child(9)) { display: none; }
+button[aria-pressed="true"] { background: #fff0e5; border-color: var(--brand); color: var(--accent); }
+.asset-profile .form-actions { align-items: center; flex-wrap: wrap; }
+@media (max-width: 740px) {
+  .service-grid th:first-child, .service-grid td:first-child { position: static; }
+  .asset-filters label { flex-basis: 100%; }
+}

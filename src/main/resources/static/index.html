@@ -5,8 +5,9 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Wook Observer · 서비스 점검</title>
     <link rel="icon" href="/observer-mark.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/app.css?v=1.5.0" />
-    <script defer src="/app.js?v=1.5.0"></script>
+    <link rel="stylesheet" href="/app.css?v=1.6.0" />
+    <script defer src="/app.js?v=1.6.0"></script>
+    <script defer src="/assets.js?v=1.6.0"></script>
   </head>
   <body>
     <div class="app-layout">
@@ -18,6 +19,7 @@
         <p class="nav-label">WORKSPACE</p>
         <nav aria-label="주 메뉴">
           <a href="#overview" data-view="overview"><svg class="nav-icon" aria-hidden="true"><use href="/icons.svg#dashboard"></use></svg>대시보드</a
+          ><a href="#assets" data-view="assets"><svg class="nav-icon" aria-hidden="true"><use href="/icons.svg#servers"></use></svg>자산 관리</a
           ><a href="#targets" data-view="targets"><svg class="nav-icon" aria-hidden="true"><use href="/icons.svg#servers"></use></svg>점검 대상</a
           ><a href="#jobs" data-view="jobs"><svg class="nav-icon" aria-hidden="true"><use href="/icons.svg#history"></use></svg>점검 이력</a
           ><a href="#catalog" data-view="catalog"
@@ -32,7 +34,7 @@
         </nav>
         <div class="sidebar-bottom">
           <span class="dot"></span> 내부망 점검 플랫폼
-          <p>Wook Observer <b>1.5.0</b></p>
+          <p>Wook Observer <b>1.6.0</b></p>
         </div>
       </aside>
       <div class="main-shell">

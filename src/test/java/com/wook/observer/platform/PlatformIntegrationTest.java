@@ -87,6 +87,37 @@ class PlatformIntegrationTest {
     }
 
     @Test
+    void assetManagementRequiresAdminCsrfAndPersistsTheWorkbookFields() throws Exception {
+        Client anonymous = new Client();
+        assertThat(anonymous.get("/api/assets").statusCode()).isEqualTo(401);
+        Client admin = login("admin", "Init1234");
+        admin.send("POST", "/api/admin/users", Map.of("username", "asset-reader", "password", "Reader123", "role", "USER"), true);
+        Client reader = login("asset-reader", "Reader123");
+        String target = targets.save(null, new Targets.Input("asset-access", "192.0.2.10", 22, "observer", "",
+                "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4f", "fixture", "PASSWORD", "secret-fixture", "", "NONE", ""), "admin");
+        var profile = new Assets.ProfileInput("INV-01", "PRODUCTION", "운영팀", "IDC", "업무", "ACTIVE", "memo", 0);
+        assertThat(reader.get("/api/assets/" + target).statusCode()).isEqualTo(200);
+        assertThat(reader.send("PUT", "/api/admin/assets/" + target, profile, true).statusCode()).isEqualTo(403);
+        assertThat(admin.send("PUT", "/api/admin/assets/" + target, profile, false).statusCode()).isEqualTo(403);
+        assertThat(admin.send("PUT", "/api/admin/assets/" + target, profile, true).statusCode()).isEqualTo(200);
+        assertThat(admin.send("PUT", "/api/admin/assets/" + target, profile, true).statusCode()).isEqualTo(409);
+        var service = new Assets.ServiceInput("업무 서비스", "TCP 8443", "업무파트", "JEUS", "8.5", "appuser", "APPLICATION", "/APP/example", "/DATA/example", "/LOG/example",
+                "start.sh", "stop.sh", "status.sh", "내부 → 외부", "<script>alert(1)</script>", false, 0);
+        String endpoint = "/api/admin/assets/" + target + "/services";
+        assertThat(reader.send("POST", endpoint, service, true).statusCode()).isEqualTo(403);
+        assertThat(admin.send("POST", endpoint, service, false).statusCode()).isEqualTo(403);
+        var created = admin.send("POST", endpoint, service, true);
+        assertThat(created.statusCode()).isEqualTo(200);
+        String id = json.readTree(created.body()).path("id").asText();
+        assertThat(reader.send("PUT", endpoint + "/" + id, service, true).statusCode()).isEqualTo(403);
+        assertThat(admin.send("PUT", endpoint + "/" + id, service, true).statusCode()).isEqualTo(409);
+        var detail = reader.get("/api/assets/" + target);
+        assertThat(detail.body()).contains("INV-01", "status.sh", "/DATA/example", "JEUS").doesNotContain("secret-fixture", "ssh_password", "private_key", "host_key");
+        assertThat(json.readTree(detail.body()).path("services").get(0).path("observation_status").asText()).isEqualTo("MANUAL");
+        assertThat(admin.get("/api/assets/nonexistent").statusCode()).isEqualTo(404);
+    }
+
+    @Test
     void resetsToEightCharactersRevokesSessionsAndPreservesBlankPasswordEdits() throws Exception {
         Client admin = login("admin", "Init1234");
         assertThat(admin.send("POST", "/api/admin/users", Map.of("username", "reset-boundary-user", "password", "Initial-password-123", "role", "USER"), true)
@@ -128,6 +159,7 @@ class PlatformIntegrationTest {
         HttpResponse<String> report = admin.get("/api/jobs/"+job);
         for (int i=0; i<100 && report.statusCode()==409; i++) { Thread.sleep(30); report=admin.get("/api/jobs/"+job); }
         assertThat(report.statusCode()).isEqualTo(200);
+        assertThat(json.readTree(admin.get("/api/assets/" + target).body()).path("services").size()).isEqualTo(1);
         assertThat(report.body()).contains("assessment", "catalogRevision", "미판정");
         var operator = json.readTree(admin.get("/api/jobs/"+job+"/overview").body());
         assertThat(operator.path("operator").path("actions").isArray()).isTrue();

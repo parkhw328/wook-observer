@@ -22,6 +22,7 @@ let session,
 const titles = {
   overview: "대시보드",
   targets: "점검 대상",
+  assets: "자산 관리",
   jobs: "점검 이력",
   catalog: "취약점 데이터",
   updates: "데이터 업데이트",
@@ -114,29 +115,13 @@ function jobsTable(jobs) {
   );
 }
 async function overview() {
-  const [targets, jobs, catalog] = await Promise.all([
-    api("/targets"),
-    api("/jobs"),
-    api("/catalog/status"),
-  ]);
-  const completed = jobs.filter((job) => job.status === "COMPLETED");
-  const findingCount = completed.reduce(
-    (sum, job) => sum + job.finding_count,
-    0,
-  );
-  const counts = Object.fromEntries(
-    catalog.counts.map((row) => [row.kind, row.count]),
-  );
-  return (
-    pageHead(
-      "서비스 환경을 한눈에",
-      "점검 대상과 최근 수집 결과, 취약점 데이터 상태를 확인하세요.",
-      `<a class="button primary" href="#targets">${admin() ? "+ 점검 대상 관리" : "점검 시작 →"}</a>`,
-    ) +
-    `<div class="kpis"><article class="kpi"><p>등록된 점검 대상</p><strong>${number(targets.length)}</strong><small>SSH로 연결하는 Linux 서버</small></article><article class="kpi"><p>진행 중인 점검</p><strong>${jobs.filter((j) => ["RUNNING", "QUEUED"].includes(j.status)).length}</strong><small>동시 2개 · 대기 최대 16개</small></article><article class="kpi ${findingCount ? "alert" : ""}"><p>최근 100회 발견·의심 항목</p><strong>${number(findingCount)}</strong><small>반복 점검의 중복 항목 포함</small></article><article class="kpi"><p>내부 취약점·설정 데이터</p><strong>${number(catalog.counts.reduce((s, c) => s + c.count, 0))}</strong><small>카탈로그 버전 ${catalog.revision}</small></article></div>` +
-    `<div class="panel"><div class="panel-title"><h2>최근 점검</h2><a class="small" href="#jobs">전체 이력 보기 →</a></div>${jobsTable(jobs.slice(0, 5))}</div>` +
-    `<div class="split"><section class="panel"><div class="panel-title"><h2>점검에서 보고서까지</h2><span class="badge info">Java 설치 없이 기본 점검</span></div><ol class="step-list"><li><span class="number">01</span><div><b>점검 대상 연결</b><p>SSH 키·비밀번호와 점검 권한을 선택하고 서버 지문을 확인합니다.</p></div></li><li><span class="number">02</span><div><b>실행 환경 수집과 기준 대조</b><p>프로세스·JVM·컨테이너를 수집하고 내부 CVE·CCE 기준과 대조합니다.</p></div></li><li><span class="number">03</span><div><b>서비스 직군별 보고서</b><p>프로세스·오픈소스·컨테이너 명세를 XLSX, Markdown, JSON으로 확인합니다.</p></div></li></ol></section><section class="panel"><div class="panel-title"><h2>취약점 데이터 상태</h2><a class="small" href="#catalog">목록 보기 →</a></div><div class="inline-metric"><span>CVE / OSV 권고</span><strong>${number(counts.CVE)}건</strong></div><div class="inline-metric"><span>CCE 설정 식별자</span><strong>${number(counts.CCE)}건</strong></div><div class="inline-metric"><span>내부 설정 규칙</span><strong>${number(counts.POLICY)}건</strong></div><p class="small">최근 반영 ${date(catalog.imported_at)}</p><div class="note warn">${catalog.counts.reduce((sum, c) => sum + c.count, 0) <= 5 ? "기본 제공 목록은 시작용 5건입니다. 운영 범위에 맞는 데이터를 반입하세요." : "저장한 데이터의 범위와 갱신 시각을 확인하세요."} 미발견은 전체 시스템의 안전을 의미하지 않습니다.</div></section></div>`
-  );
+  const [assets, jobs, catalog] = await Promise.all([api("/assets"), api("/jobs"), api("/catalog/status")]);
+  const attention = assets.items.filter(a => !a.job_id || a.undocumented_count > 0 || a.latest_status === "FAILED");
+  return pageHead("자산과 운영 현황을 한눈에", "등록 자산, 서비스 운영대장과 최근 점검 결과를 함께 확인하세요.", '<a class="button primary" href="#assets">자산 관리 열기 →</a>')
+    + assetKpis(assets.summary)
+    + `<div class="split"><section class="panel"><div class="panel-title"><h2>관리 현황</h2><a href="#assets">자산 목록 →</a></div><div class="inline-metric"><span>진행 중인 점검</span><strong>${number(assets.summary.inProgress)}대</strong></div><div class="inline-metric"><span>최근 점검 실패</span><strong>${number(assets.summary.failed)}대</strong></div><p class="small">점검 실패 시에도 이전 수집 기준 시각과 수기 운영대장은 유지됩니다.</p></section><section class="panel"><div class="panel-title"><h2>취약점 데이터</h2><a href="#catalog">목록 보기 →</a></div><div class="inline-metric"><span>내부 카탈로그</span><strong>${number(catalog.counts.reduce((sum, c) => sum + c.count, 0))}건</strong></div><p class="small">최근 반영 ${date(catalog.imported_at)} · 개정 ${catalog.revision}</p><p class="small">판정 범위와 수집 한계를 점검 상세에서 확인하세요.</p></section></div>`
+    + `<section class="panel"><div class="panel-title"><h2>점검·운영 정보 보완</h2><span class="small">${number(attention.length)}대 · 최대 5대 표시</span></div>${attention.length ? assetTable(attention.slice(0, 5)) : '<p>점검 전·실패·운영 절차 미입력 자산이 없습니다.</p>'}</section>`
+    + `<section class="panel"><div class="panel-title"><h2>최근 점검</h2><a href="#jobs">전체 이력 →</a></div>${jobsTable(jobs.slice(0, 5))}</section>`;
 }
 async function targetView() {
   const targets = await api("/targets");
@@ -150,7 +135,7 @@ async function targetView() {
     ) +
     '<div class="note">Linux의 SSH·셸·ps가 기본 수집에 필요합니다. 컨테이너는 Docker 조회 권한, Java 상세는 Python 3 또는 jcmd 등 대상에서 사용할 수 있는 도구에 따라 수집 범위가 달라집니다.</div>' +
     (targets.length
-      ? `<div class="target-grid">${targets.map((t) => `<article class="target-card"><div class="head-actions"><span class="badge info">SSH / LINUX</span><span class="badge">${t.auth_type === "PASSWORD" ? "비밀번호 인증" : "SSH 키 인증"}</span><span class="badge">${esc({NONE:"접속 계정 권한", SU_ROOT:"root 전환 · su", SUDO:"root 전환 · sudo", SUDO_NOPASSWD:"root 전환 · sudo"}[t.privilege_mode || "NONE"])}</span></div><h2>${esc(t.name)}</h2><p class="target-address">${esc(t.ssh_user)}@${esc(t.host)}:${t.port}</p><p class="small">${esc(t.description || "등록된 설명이 없습니다.")}</p><div class="actions">${admin() ? `<button class="quiet" data-action="edit-target" data-id="${esc(t.id)}">연결 설정</button>` : ""}<button class="primary" data-action="scan" data-id="${esc(t.id)}">점검 시작 →</button></div></article>`).join("")}</div>`
+      ? `<div class="target-grid">${targets.map((t) => `<article class="target-card"><div class="head-actions"><span class="badge info">SSH / LINUX</span><span class="badge">${t.auth_type === "PASSWORD" ? "비밀번호 인증" : "SSH 키 인증"}</span><span class="badge">${esc({NONE:"접속 계정 권한", SU_ROOT:"root 전환 · su", SUDO:"root 전환 · sudo", SUDO_NOPASSWD:"root 전환 · sudo"}[t.privilege_mode || "NONE"])}</span></div><h2>${esc(t.name)}</h2><p class="target-address">${esc(t.ssh_user)}@${esc(t.host)}:${t.port}</p><p class="small">${esc(t.description || "등록된 설명이 없습니다.")}</p><div class="actions"><a class="button" href="${assetLink(t.id)}">자산 관리</a>${admin() ? `<button class="quiet" data-action="edit-target" data-id="${esc(t.id)}">연결 설정</button>` : ""}<button class="primary" data-action="scan" data-id="${esc(t.id)}">점검 시작 →</button></div></article>`).join("")}</div>`
       : empty(
           "아직 등록된 대상이 없습니다",
           "관리자가 대상 서버의 SSH 접속 정보를 등록하면 점검을 시작할 수 있습니다.",
@@ -417,7 +402,7 @@ async function detail(id) {
 }
 async function render() {
   if (!session) return;
-  const requested = location.hash.slice(1) || "overview";
+  const requested = location.hash.slice(1).split("/")[0] || "overview";
   currentView = Object.hasOwn(titles, requested) ? requested : "overview";
   if (["users", "updates"].includes(currentView) && !admin())
     currentView = "overview";
@@ -434,6 +419,7 @@ async function render() {
     const html = await {
       overview,
       targets: targetView,
+      assets: assetView,
       jobs: async () =>
         pageHead(
           "점검 이력",
@@ -587,7 +573,14 @@ $("#logout").addEventListener("click", async () => {
     toast(error.message);
   }
 });
-window.addEventListener("hashchange", render);
+window.addEventListener("hashchange", event => {
+  if (hasAssetDraft() && !window.confirm("저장하지 않은 자산·서비스 입력이 있습니다. 입력을 버리고 이동할까요?")) {
+    history.replaceState(null, "", new URL(event.oldURL).hash || "#overview");
+    return;
+  }
+  editingService = null;
+  render();
+});
 (async () => {
   const response = await fetch("/api/session", { cache: "no-store" });
   session = await response.json();

@@ -24,10 +24,11 @@ public class ScanJobs implements ApplicationRunner {
     private final Targets targets;
     private final SshCollector collector;
     private final Assessor assessor;
+    private final Assets assets;
     private final JsonMapper json = JsonMapper.builder().build();
     private final ThreadPoolExecutor executor = new ThreadPoolExecutor(2, 2, 0, TimeUnit.SECONDS, new ArrayBlockingQueue<>(16));
-    public ScanJobs(Store store, Targets targets, SshCollector collector, Assessor assessor) {
-        this.store = store; this.targets = targets; this.collector = collector; this.assessor = assessor;
+    public ScanJobs(Store store, Targets targets, SshCollector collector, Assessor assessor, Assets assets) {
+        this.store = store; this.targets = targets; this.collector = collector; this.assessor = assessor; this.assets = assets;
     }
 
     @Override
@@ -61,8 +62,7 @@ public class ScanJobs implements ApplicationRunner {
             store.jdbc.update("UPDATE scan_job SET status = 'RUNNING' WHERE id = ?", id);
             Observation report = assessor.assess(collector.collect(target));
             long count = com.wook.observer.report.OperatorReport.from(report).actions().size();
-            store.jdbc.update("UPDATE scan_job SET status = 'COMPLETED', finished_at = ?, report_json = ?, finding_count = ?, message = ? WHERE id = ?",
-                    Instant.now().toString(), json.writeValueAsString(report), count, "수집 완료; 수집 한계와 취약점 판정 범위를 확인하세요.", id);
+            assets.complete(id, report, count);
         } catch (Exception e) { fail(id, e instanceof ApiProblem ? e.getMessage() : "점검 실패. SSH 연결·대상 도구·접근 권한을 확인하세요."); }
     }
 
