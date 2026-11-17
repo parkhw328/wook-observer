@@ -60,8 +60,8 @@ class SystemInventoryTest {
     }
 
     @Test
-    void distinguishesUnavailableFailureTimeoutAndSuccessfulEmptyDatabase() {
-        for (Status status : List.of(Status.UNAVAILABLE, Status.FAILED, Status.TIMEOUT, Status.COLLECTED)) {
+    void distinguishesUnavailableFailureAndTimeout() {
+        for (Status status : List.of(Status.UNAVAILABLE, Status.FAILED, Status.TIMEOUT)) {
             var parser = new SystemInventoryParser();
             parser.accept("RPM_STATUS\t" + status);
             var issues = new ArrayList<Observation.Issue>();
@@ -70,6 +70,18 @@ class SystemInventoryTest {
             assertThat(inventory.rpm().packages()).isEmpty();
             assertThat(issues.stream().anyMatch(i -> i.layer().equals("rpm"))).isEqualTo(status != Status.COLLECTED);
         }
+    }
+
+    @Test
+    void emptySuccessfulRpmOutputIsNotEvidenceOfAnEmptyInstalledInventory() {
+        var parser = new SystemInventoryParser();
+        parser.accept("RPM_STATUS\tCOLLECTED");
+        var issues = new ArrayList<Observation.Issue>();
+        assertThat(parser.build(issues).rpm().status()).isEqualTo(Status.FAILED);
+        assertThat(issues).anySatisfy(i -> {
+            assertThat(i.layer()).isEqualTo("rpm");
+            assertThat(i.message()).contains("결과가 비어", "최신 수집 SH");
+        });
     }
 
     @Test
@@ -145,7 +157,7 @@ class SystemInventoryTest {
     }
 
     private void prepareTools() throws Exception {
-        for (String tool : List.of("uname", "head", "base64", "tr", "awk", "timeout")) {
+        for (String tool : List.of("uname", "head", "base64", "tr", "awk", "timeout", "sh")) {
             Files.createSymbolicLink(temporary.resolve(tool), Path.of("/usr/bin", tool));
         }
     }

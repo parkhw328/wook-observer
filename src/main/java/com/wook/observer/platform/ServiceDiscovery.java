@@ -23,23 +23,13 @@ public final class ServiceDiscovery {
                             List<Long> pids, String executable, String runUser, String image,
                             String containerId, String state) { }
     public record Summary(Observation.Host host, String distribution, String socketStatus, String socketMessage,
-                          int processCount, int containerCount, int issueCount) { }
+                          int processCount, int containerCount, int issueCount, OsLifecycle.Identity osIdentity) { }
 
     public static Summary summary(Observation report) {
-        String distribution = "";
-        for (var detail : report.systemInventory().os()) {
-            if (!"os_release".equals(detail.key()) || detail.status() != SystemInventory.Status.COLLECTED) continue;
-            for (String line : detail.value().split("\n")) if (line.startsWith("PRETTY_NAME=")) {
-                distribution = line.substring("PRETTY_NAME=".length()).strip();
-                if (distribution.length() >= 2 && (distribution.startsWith("\"") && distribution.endsWith("\"")
-                        || distribution.startsWith("'") && distribution.endsWith("'"))) distribution = distribution.substring(1, distribution.length() - 1);
-            }
-        }
-        // Keep the supplied OS evidence intact; do not parse a release file as shell code.
-        if (distribution.isBlank()) distribution = report.host().os() + " " + report.host().osVersion();
+        var identity = OsLifecycle.identify(report);
         var sockets = report.systemInventory().sockets();
-        return new Summary(report.host(), distribution, sockets.status().name(), sockets.message(),
-                safe(report.processes()).size(), safe(report.containers()).size(), safe(report.issues()).size());
+        return new Summary(report.host(), identity.displayName(), sockets.status().name(), sockets.message(),
+                safe(report.processes()).size(), safe(report.containers()).size(), safe(report.issues()).size(), identity);
     }
 
     public static List<Candidate> discover(Observation report) {

@@ -133,6 +133,10 @@ public final class SystemInventoryParser {
         List<OsDetail> details = SOURCES.entrySet().stream().map(entry -> os.getOrDefault(entry.getKey(),
                 new OsDetail(entry.getKey(), entry.getValue(), Status.NOT_COLLECTED, ""))).toList();
         if (limited || invalidRpm || (rpmSeen && rpmStatus == Status.NOT_COLLECTED)) { rpmStatus = Status.TRUNCATED; }
+        if (rpmStatus == Status.COLLECTED && packages.isEmpty()) {
+            rpmStatus = Status.FAILED;
+            rpmMessage = "RPM 결과가 비어 있습니다. 구형 RPM 조회 호환성·DB 상태를 확인하고 최신 수집 SH로 다시 수집하세요.";
+        }
         if (rpmMessage.isEmpty()) {
             rpmMessage = switch (rpmStatus) {
                 case COLLECTED -> "설치 RPM DB 조회 완료. 설치 여부이며 서비스 사용·CVE 판정은 별도입니다.";

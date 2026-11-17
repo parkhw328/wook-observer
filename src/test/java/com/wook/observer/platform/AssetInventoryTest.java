@@ -25,6 +25,40 @@ class AssetInventoryTest {
     private final JsonMapper json = JsonMapper.builder().build();
 
     @Test
+    void savesExpandedServiceTypesAndPreservesThemAcrossObservationRefresh() {
+        String target = target();
+        complete(target, ServiceDiscoveryTest.host(100, 8080), 0);
+        String id = Store.string(services(target).getFirst(), "id");
+        int revision = 0;
+        for (String type : List.of("WEB", "DATABASE", "CONTAINER", "CACHE", "MESSAGING", "INFRASTRUCTURE", "MIDDLEWARE", "APPLICATION", "COMMON", "OTHER")) {
+            var input = new Assets.ServiceInput("업무 서비스", "TCP 8080", "운영팀", "", "", "", type,
+                    "", "", "", "start", "stop", "status", "", "", false, revision++);
+            assets.saveService(target, id, input, "admin");
+            complete(target, ServiceDiscoveryTest.host(100 + revision, 8080), 0);
+            assertThat(services(target).getFirst()).containsEntry("service_type", type).containsEntry("revision", revision);
+        }
+    }
+
+    @Test
+    void enrichesLegacyOsProjectionWithoutChangingReportsOrHandwrittenAssetData() {
+        String target = target();
+        var report = OsLifecycleTest.report("", "CentOS Linux release 7.9.2009 (Core)");
+        String job = complete(target, report, 0);
+        assets.saveProfile(target, profile(0), "admin");
+        String original = Store.string(store.one("SELECT report_json FROM scan_job WHERE id=?", job), "report_json");
+        var tree = (tools.jackson.databind.node.ObjectNode) json.readTree(Store.string(store.one("SELECT summary_json FROM asset_inventory WHERE target_id=?", target), "summary_json"));
+        tree.remove("osIdentity"); tree.put("distribution", "Linux 3.10.0.el7");
+        store.jdbc.update("UPDATE asset_inventory SET summary_json=? WHERE target_id=?", json.writeValueAsString(tree), target);
+        assertThat(assets.enrichOsIdentity()).isGreaterThanOrEqualTo(1);
+        var asset = (Map<String, Object>) assets.details(target).get("asset");
+        assertThat(((OsLifecycle.Support) asset.get("os_support")).status()).isEqualTo("END_OF_LIFE");
+        assertThat(((ServiceDiscovery.Summary) asset.get("inventory")).distribution()).contains("CentOS Linux");
+        assertThat(asset).containsEntry("revision", 1).containsEntry("job_id", job).containsEntry("finding_count", 0);
+        assertThat(Store.string(store.one("SELECT report_json FROM scan_job WHERE id=?", job), "report_json")).isEqualTo(original);
+        assertThat(assets.enrichOsIdentity()).isZero();
+    }
+
+    @Test
     void annotationsSurviveRestartAbsenceRediscoveryAndArchiving() {
         String target = target();
         var first = ServiceDiscoveryTest.host(100, 8080);

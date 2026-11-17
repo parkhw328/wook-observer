@@ -29,6 +29,8 @@ public class OfflineImports {
         var report = parsed.report();
         var result = new LinkedHashMap<String, Object>();
         result.put("host", report.host()); result.put("collectedAt", report.collectedAt()); result.put("sha256", parsed.sha256());
+        var os = OsLifecycle.identify(report);
+        result.put("distribution", os.displayName()); result.put("osSupport", OsLifecycle.evaluate(os));
         result.put("processes", report.processes().size()); result.put("containers", report.containers().size());
         result.put("jvms", report.javaProcesses().size()); result.put("rpmPackages", report.systemInventory().rpm().packages().size());
         result.put("sockets", report.systemInventory().sockets().entries().size()); result.put("issues", report.issues());

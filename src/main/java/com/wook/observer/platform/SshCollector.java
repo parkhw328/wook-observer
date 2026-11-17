@@ -17,6 +17,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 @Component
 @Profile("!collector")
@@ -67,7 +68,8 @@ public class SshCollector {
                 switch (parts[0]) {
                     case "HOST" -> host = line.split("\t");
                     case "ACCESS" -> {
-                        if (parts[1].matches("[0-9]{1,10}") && parts[2].matches("[A-Za-z0-9_.-]{1,64}")) {
+                        if (parts[1].matches("[0-9]{1,10}") && !parts[2].isBlank() && parts[2].length() <= 256
+                                && parts[2].codePoints().noneMatch(Character::isISOControl)) {
                             facts.put("host:effective_uid", parts[1]);
                             facts.put("host:effective_user", parts[2]);
                             if (!"0".equals(parts[1])) { issues.add(new Observation.Issue("permission", "SSH target", "일반 계정 접근 범위 점검: root 전용 프로세스·라이브러리·Docker·설정은 누락될 수 있음")); }
@@ -146,7 +148,18 @@ public class SshCollector {
         String scope = isolated ? "SSH 컨테이너 네임스페이스" : "SSH Linux 호스트";
         scope += facts.containsKey("host:effective_uid") ? " / 실행 계정 " + facts.get("host:effective_user") + " (UID " + facts.get("host:effective_uid") + ")" : " (계정 접근 범위)";
         var inventory = system.build(issues);
-        return new Observation("1.10.1", Instant.now(), new Observation.Host(host[1], "Linux", host[2], host[3], Integer.parseInt(host[4]),
+        String hostName = host[1];
+        if (hostName.isBlank()) {
+            for (var detail : inventory.os()) {
+                if (!detail.key().equals("uname_all") || detail.status() != com.wook.observer.model.SystemInventory.Status.COLLECTED) continue;
+                var match = Pattern.compile("^Linux[ \\t]+([A-Za-z0-9_.-]{1,253})[ \\t]+").matcher(detail.value());
+                if (match.find()) { hostName = match.group(1); break; }
+            }
+            if (hostName.isBlank()) throw new ApiProblem(502, "호스트명 수집 근거가 없습니다. 최신 수집 SH로 다시 수집하세요.");
+            facts.put("host:identity_source", "uname_all");
+            issues.add(new Observation.Issue("host", "호스트명", "기본 호스트명이 비어 있어 파일의 uname -a 근거로 보완했습니다. 최신 수집 SH를 사용하세요."));
+        }
+        return new Observation("1.11.0", Instant.now(), new Observation.Host(hostName, "Linux", host[2], host[3], Integer.parseInt(host[4]),
                 (long) Double.parseDouble(host[5]), scope, dockerVersion), linked, java, containers, issues, facts, null, inventory);
     }
 }

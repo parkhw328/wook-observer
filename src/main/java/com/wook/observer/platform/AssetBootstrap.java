@@ -23,6 +23,7 @@ public class AssetBootstrap implements ApplicationRunner {
                 AND NOT EXISTS (SELECT 1 FROM asset_inventory i WHERE i.target_id=j.target_id AND i.job_id=j.id)
                 """);
         for (var row : rows) assets.backfill(Store.string(row, "id"));
-        OperationLog.info("asset.backfill.completed", "assets", rows.size(), "durationMs", OperationLog.elapsed(started));
+        int identities = assets.enrichOsIdentity();
+        OperationLog.info("asset.backfill.completed", "assets", rows.size(), "osIdentities", identities, "durationMs", OperationLog.elapsed(started));
     }
 }

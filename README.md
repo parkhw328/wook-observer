@@ -2,7 +2,7 @@
 
 등록 서버의 자산 정보와 서비스 운영대장을 관리하고, **실행 프로세스 → JVM·라이브러리 → Docker 컨테이너** 점검 이력·명세·취약점 대조 결과를 연결하는 내부망 웹서비스입니다.
 
-현재 버전은 **1.10.1**입니다. 중앙 서비스는 Spring Boot 4.1.2 / Java 21.0.13 이상 / PostgreSQL 18로 구성하고 Docker Compose로 실행합니다. 대상 Linux 서버는 SSH 또는 현장 실행 수집 파일로 점검하며 **Java를 새로 설치할 필요가 없습니다.**
+현재 버전은 **1.11.0**입니다. RHEL·CentOS 7.x의 구형 도구로 수집한 자산도 반입하고, 자산 목록·상세·업로드 미리보기·MD/XLSX에서 **OS 업그레이드 필요**를 표시합니다. 중앙 서비스는 Spring Boot 4.1.2 / Java 21.0.13 이상 / PostgreSQL 18로 구성하고 Docker Compose로 실행합니다. 대상 Linux 서버는 SSH 또는 현장 실행 수집 파일로 점검하며 **Java를 새로 설치할 필요가 없습니다.**
 
 ## Docker로 시작하기
 
@@ -64,7 +64,7 @@ Python 3나 `jcmd`가 없어도 기본 점검은 수행하고 상세 미수집 �
 
 자산 화면은 전체 가로 폭과 13px 표 글자를 사용합니다. 왼쪽 메뉴는 16px, 폭은 240px(중간 화면 220px)로 줄여 본문 공간을 늘렸습니다. 포트의 자동 관측·미입력 안내와 수정 이력은 상세 팝업에서 확인하고 편집 버튼은 표 맨 오른쪽에 고정합니다. 포트는 프로토콜/번호별 최대 4개 요약, PID는 별도 열에서 최대 3개만 표시하며 전체 주소·Docker 매핑·PID는 마우스오버·키보드·터치로 확인합니다. 목록의 **전체 자산 XLSX**, 서버 상세의 **자산 XLSX**에서 저장된 전체 항목(보관 포함)을 내려받을 수 있습니다. 검색/필터와 저장 전 입력은 내보내기에 적용하지 않습니다.
 
-**시스템 서비스 항목 제외** 버튼을 켜면 커널·systemd·SSH·시간 동기화 등 식별 가능한 OS 서비스 행을 숨기고, 다시 누르면 표시합니다. 기본은 전체 표시이며 수기 정보와 XLSX 전체 항목은 보존합니다. PID는 쉼표 없이 개별 숫자 배지로 보여줍니다. 왼쪽 하단은 **내부망 점검 플랫폼 (1.10.1)** 한 줄로 정리하고 본문 하단의 브랜드 푸터를 제거했습니다.
+**시스템 서비스 항목 제외** 버튼을 켜면 커널·systemd·SSH·시간 동기화 등 식별 가능한 OS 서비스 행을 숨기고, 다시 누르면 표시합니다. 기본은 전체 표시이며 수기 정보와 XLSX 전체 항목은 보존합니다. PID는 쉼표 없이 개별 숫자 배지로 보여줍니다. 왼쪽 하단은 **내부망 점검 플랫폼 (1.11.0)** 한 줄로 정리하고 본문 하단의 브랜드 푸터를 제거했습니다.
 
 수기 정보는 DB에 저장하며 재점검으로 덮어쓰지 않습니다. 미관측 항목은 보존하고 보관함으로 옮기거나 복원할 수 있습니다. ADMIN은 편집, USER는 조회·점검하며 동시 수정은 충돌로 안내합니다. **명령은 기록용이며 실행하지 않습니다.** 과거 점검 보고서는 당시 스냅샷을 유지합니다.
 
@@ -134,7 +134,7 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s src/test/python
 # 자산 포트 요약·PID 표시 회귀 검사 (개발 PC의 Node.js 18 이상)
 node --test src/test/js/*.test.cjs
 # DB 없이 로컬 서버를 한 번 점검하고 종료
-java -jar target/wook-observer-1.10.1.jar --observer.report-dir=./reports/check-001
+java -jar target/wook-observer-1.11.0.jar --observer.report-dir=./reports/check-001
 ```
 
 일회성 CLI는 기존 로컬 수집기를 유지하며 취약점 DB 대조를 수행하지 않습니다(`미실시`). CLI XLSX는 34개 시트입니다. 출력 디렉터리는 새 경로여야 합니다.
@@ -145,19 +145,19 @@ java -jar target/wook-observer-1.10.1.jar --observer.report-dir=./reports/check-
 
 ## 폐쇄망 배포와 백업
 
-1.10.1은 자산 화면의 포트/PID 요약, 넓은 표와 작은 글자, 자산·서비스 XLSX 다운로드와 Observer 로고를 제공합니다. 메뉴명은 상단에만 표시하고 본문의 중복 제목을 제거했습니다. 목록의 **전체 자산 XLSX**, 서버 상세의 **자산 XLSX**로 저장된 전체 항목(보관 포함)을 내려받습니다. 화면 검색/필터와 저장 전 입력은 내보내기에 적용되지 않습니다.
+1.11.0은 자산 화면의 포트/PID 요약, 넓은 표와 작은 글자, 자산·서비스 XLSX 다운로드와 Observer 로고를 제공합니다. 메뉴명은 상단에만 표시하고 본문의 중복 제목을 제거했습니다. 목록의 **전체 자산 XLSX**, 서버 상세의 **자산 XLSX**로 저장된 전체 항목(보관 포함)을 내려받습니다. 화면 검색/필터와 저장 전 입력은 내보내기에 적용되지 않습니다.
 
 점검·SSH 수집·판정·자산 변경·카탈로그 갱신·다운로드의 결과와 소요 시간을 기본 INFO 로그로 기록합니다. 요청 ID를 비동기 점검까지 연결하고 비밀번호·키·명령 본문·예외 메시지는 제외합니다. `.env`의 `OBSERVER_LOG_LEVEL=DEBUG`로 일반 API 조회와 예외 코드 위치를 추가할 수 있습니다. 앱/DB 로그는 파일당 10 MiB·5개로 회전합니다. 조회 명령과 이벤트는 [운영 로그 안내](docs/operations-logging.md)를 참고하세요.
 
-기존 설치에서는 같은 Compose 프로젝트와 DB 볼륨, 기존 `.env`를 유지해 업데이트합니다. 1.10.0부터 V5 마이그레이션으로 수집 방식·파일 해시와 업로드 동시 처리용 잠금 테이블을 추가합니다. 기존 대상은 SSH로 유지합니다. 1.5.0 이하에서는 V4 자산 관리 테이블도 추가하고 이전 점검 결과를 초기 자산 정보에 연결합니다. 1.10.0 → 1.10.1에는 추가 DB 마이그레이션이 없습니다. 자세한 절차는 아래 설치 안내를 따르세요.
+기존 설치에서는 같은 Compose 프로젝트와 DB 볼륨, 기존 `.env`를 유지해 업데이트합니다. 1.10.0부터 V5 마이그레이션으로 수집 방식·파일 해시와 업로드 동시 처리용 잠금 테이블을 추가합니다. 기존 대상은 SSH로 유지합니다. 1.5.0 이하에서는 V4 자산 관리 테이블도 추가하고 이전 점검 결과를 초기 자산 정보에 연결합니다. 1.10.0/1.10.1 → 1.11.0에는 추가 DB 마이그레이션이 없습니다. 기동 시 기존 최근 점검의 OS 근거로 자산 표시 정보를 보완하며, 수기 정보와 원본 점검 스냅샷은 유지합니다. 자세한 절차는 아래 설치 안내를 따르세요.
 
 **Linux x86_64(amd64), Docker Engine·Compose 설치 완료** 환경용 반입 묶음을 제공합니다. 앱·PostgreSQL 이미지 전체, Maven·RPM 취약점 ZIP, CCE/정책 JSON, 설정·운영 스크립트, SHA-256과 소스 스냅샷을 포함합니다. 반입 서버에는 Java·Maven·Python·OpenSSL을 설치할 필요가 없습니다. 실행 절차는 묶음의 `README.md`를 따르며 원본은 [폐쇄망 설치 안내](deployment/offline/README.md)입니다.
 
 ```bash
 # 반입 서버: 함께 제공한 두 파일의 이름을 사용
-sha256sum -c wook-observer-1.10.1-linux-amd64-YYYYMMDD.tar.gz.sha256
-tar -xzf wook-observer-1.10.1-linux-amd64-YYYYMMDD.tar.gz
-cd wook-observer-1.10.1-linux-amd64-YYYYMMDD
+sha256sum -c wook-observer-1.11.0-linux-amd64-YYYYMMDD.tar.gz.sha256
+tar -xzf wook-observer-1.11.0-linux-amd64-YYYYMMDD.tar.gz
+cd wook-observer-1.11.0-linux-amd64-YYYYMMDD
 ./install.sh
 # 새 .env에서 관리자 비밀번호와 접속 주소·포트 확인
 ./start.sh
@@ -165,13 +165,13 @@ cd wook-observer-1.10.1-linux-amd64-YYYYMMDD
 
 `install.sh`는 파일 무결성 확인, `docker load`, 새 자격 증명 생성을 수행합니다. 오프라인 Compose에는 빌드 항목이 없으며 `pull_policy: never`와 `--pull never`로 실행합니다. 로그인 후 **데이터 업데이트**에서 `maven-osv.zip`과 `rpm-*.zip` 파일을 차례로 반영하세요. 파일별 원본 이름을 설정해 즉시 갱신하거나 파일 업로드를 사용할 수 있습니다. 기존 PC의 DB·계정·SSH 키·보고서는 반입 묶음에 넣지 않습니다.
 
-새 묶음을 만드는 **준비 PC에서만** Python 3.11 이상과 Docker가 필요합니다. `v1.10.1`과 일치하는 `wook-observer:1.10.1`, `postgres:18.6-bookworm`의 amd64 이미지 및 `updates/maven-osv.zip`·`updates/rpm-*.zip`·각 manifest를 먼저 준비한 뒤 아래를 실행하세요. 이미지 내보내기에 `docker image save --platform`을 지원하는 Docker가 필요합니다.
+새 묶음을 만드는 **준비 PC에서만** Python 3.11 이상과 Docker가 필요합니다. `v1.11.0`과 일치하는 `wook-observer:1.11.0`, `postgres:18.6-bookworm`의 amd64 이미지 및 `updates/maven-osv.zip`·`updates/rpm-*.zip`·각 manifest를 먼저 준비한 뒤 아래를 실행하세요. 이미지 내보내기에 `docker image save --platform`을 지원하는 Docker가 필요합니다.
 
 ```bash
-python3 scripts/package-offline.py --output resources/offline/wook-observer-1.10.1-linux-amd64-YYYYMMDD
+python3 scripts/package-offline.py --output resources/offline/wook-observer-1.11.0-linux-amd64-YYYYMMDD
 # 생성 디렉터리의 별도 복사본에서 설치·기동·데이터 반영 검증
 # 원본 디렉터리의 VERIFICATION.md에 결과 기록 (.env 생성 금지)
-python3 scripts/package-offline.py --output resources/offline/wook-observer-1.10.1-linux-amd64-YYYYMMDD --archive-only
+python3 scripts/package-offline.py --output resources/offline/wook-observer-1.11.0-linux-amd64-YYYYMMDD --archive-only
 ```
 
 최종 `.tar.gz`와 `.tar.gz.sha256`은 `resources/offline/`에 생성되며 Git에 추가하지 않습니다. 동일 버전의 앱 이미지를 다시 포장할 때는 앱 태그를 유지하고 `PACKAGE-MANIFEST.json`에 묶음 개정·생성 시각·이미지/데이터 해시를 기록합니다. 소스 스냅샷만으로 폐쇄망에서 재빌드하려면 별도의 Maven 의존성 반입이 필요합니다.
@@ -185,3 +185,11 @@ python3 scripts/package-offline.py --output resources/offline/wook-observer-1.10
 Windows, Kubernetes/containerd, 지원 배포판 이외 OS 패키지 CVE, 컨테이너별 패키지 DB·이미지 레이어 전체 스캔, 실제 동적 클래스 로딩, systemd/호출 관계는 후속 범위입니다. 원격 JVM의 세부 수집은 권한·네임스페이스·도구에 의존합니다. 오류 0건이 전체 계층의 완전한 분석을 의미하지 않습니다.
 
 규칙·요구사항·검증 이력은 [rules/rules.md](rules/rules.md), [rules/requirements.md](rules/requirements.md), [rules/versions.md](rules/versions.md)에서 관리합니다. 루트 `resources/`는 공유용이며 커밋하지 않습니다. 기존 `AGENTS.md`는 보존합니다. 실제 비밀번호·SSH 키·반입 데이터·보고서도 Git에서 제외합니다.
+
+## 구형 서버 자산 식별과 OS 지원 상태
+
+RHEL·CentOS 7.x의 procps-ng 3.3.10, RPM 4.11, 헤더가 있는 `ss` 출력, `hostname` 없는 최소 환경을 처리합니다. Python 3·Docker·jcmd가 없어도 기본 자산은 반입할 수 있습니다. 최신 `observer-collect.sh`로 다시 수집하세요. 기존 파일은 해시와 완료 여부가 유효하고 `uname -a`에 호스트명 근거가 있으면 누락된 호스트명을 보완합니다. RPM 0건만으로 정상 수집으로 표시하지 않습니다.
+
+CentOS Linux 7은 지원 종료, RHEL 7은 정규 유지보수 종료로 구분합니다. RHEL 7 ELS 계약 여부는 미확인으로 표시하며, 자산 대시보드의 **OS 업그레이드 필요** 버튼으로 모아볼 수 있습니다. OS 수명주기는 취약점 건수와 분리하며 다른 배포판을 지원 중으로 추정하지 않습니다. [OS 지원 정책과 근거](docs/os-lifecycle.md), [직접 수집과 반입 안내](docs/offline-collection.md)를 참고하세요.
+
+서비스 등록/편집의 **서비스 구분**은 미들웨어·애플리케이션·공통 항목 외에 웹 서버·데이터베이스·컨테이너·캐시·메시징·인프라를 지원합니다. 저장한 분류는 재점검 후에도 유지하고 MD/XLSX에 같은 이름으로 표시합니다.

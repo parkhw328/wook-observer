@@ -99,4 +99,51 @@ class OfflineInventoryTest {
         assertThat(new String(help.getInputStream().readAllBytes(), StandardCharsets.UTF_8)).contains("Usage:", ".observer");
         assertThat(help.waitFor()).isZero();
     }
+
+    @Test
+    void rejectsBrokenEl7ProcessOutputBeforeLeavingAnUploadFile() throws Exception {
+        String broken = payload("legacy").replaceAll("(?m)^PROCESS\\t.*$", "PROCESS\t,ppid=,user=,rss=,nlwp=,comm=");
+        // A fixed inventory fixture exercises the actual wrapper completion check without collecting this host.
+        String wrapper;
+        try (var in = getClass().getResourceAsStream("/collector/offline-collect.sh")) {
+            wrapper = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        }
+        Path output = Files.createDirectory(temp.resolve("output"));
+        Path script = temp.resolve("broken-collect.sh");
+        Files.writeString(script, wrapper.replace("# OBSERVER_INVENTORY", "cat <<'FIXTURE'\n" + broken + "FIXTURE\n"));
+        var process = new ProcessBuilder("sh", script.toString(), output.toString()).redirectErrorStream(true).start();
+        String message = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        assertThat(process.waitFor()).isEqualTo(2);
+        assertThat(message).contains("process inventory is incomplete");
+        try (var files = Files.list(output)) { assertThat(files.toList()).isEmpty(); }
+        assertThatThrownBy(() -> inventory.parse(file(broken, Instant.now()))).hasMessageContaining("구형 ps", "최신 SH");
+    }
+
+    @Test
+    void recoversLegacyMissingHostnameOnlyFromCompleteCollectedUnameEvidence() {
+        String encoded = java.util.Base64.getEncoder().encodeToString("Linux legacy-rhel7 3.10.0-1160.el7.x86_64 #1 SMP x86_64 GNU/Linux".getBytes(StandardCharsets.UTF_8));
+        String raw = payload("").replace("DONE\n", "OSINFO\tuname_all\tCOLLECTED\t" + encoded + "\nDONE\n");
+        byte[] bytes = file(raw, Instant.now());
+        var parsed = inventory.parse(bytes);
+        assertThat(parsed.report().host().name()).isEqualTo("legacy-rhel7");
+        assertThat(parsed.sha256()).isEqualTo(OfflineInventory.sha256(bytes));
+        assertThat(parsed.report().facts()).containsEntry("host:identity_source", "uname_all");
+        assertThat(parsed.report().issues()).anyMatch(i -> i.message().contains("uname -a"));
+        assertThatThrownBy(() -> inventory.parse(file(payload(""), Instant.now()))).hasMessageContaining("호스트명");
+        assertThatThrownBy(() -> inventory.parse(file(raw.replace("COLLECTED", "FAILED"), Instant.now()))).hasMessageContaining("호스트명");
+        assertThatThrownBy(() -> inventory.parse(new String(bytes, StandardCharsets.UTF_8).replace(encoded, encoded + "A").getBytes(StandardCharsets.UTF_8)))
+                .hasMessageContaining("무결성");
+    }
+
+    @Test
+    void permitsBoundedDirectoryAccountNamesAndLegacyRpmFailuresWithoutLosingTheAsset() {
+        for (String user : new String[]{"EXAMPLE\\legacy.admin", "operator@example.org", "운영계정"}) {
+            String raw = payload("centos7").replace("ACCESS\t1000\toperator", "ACCESS\t1000\t" + user)
+                    .replace("RPM_STATUS\tUNAVAILABLE", "RPM_STATUS\tCOLLECTED");
+            var report = inventory.parse(file(raw, Instant.now())).report();
+            assertThat(report.facts()).containsEntry("host:effective_user", user);
+            assertThat(report.systemInventory().rpm().status()).isEqualTo(com.wook.observer.model.SystemInventory.Status.FAILED);
+            assertThat(report.host().name()).isEqualTo("centos7");
+        }
+    }
 }

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Observer 1.10.1: run on the Linux server being inspected.
+# Observer 1.11.0: run on the Linux server being inspected.
 # Usage: sh observer-collect.sh [output-directory]
 # No network transfer, installation, service changes or automatic privilege escalation.
 set -eu
@@ -42,9 +42,30 @@ if [ "$observer_size" -gt 16776000 ] || [ "$(tail -n 1 "$observer_work/payload")
   printf 'Incomplete inventory or output larger than 16 MiB. No upload file was kept.\n' >&2
   exit 2
 fi
+if ! awk -F '\t' '
+  $1 == "HOST" { host=(NF == 6 && $2 != "" && $5 ~ /^[1-9][0-9]*$/) }
+  $1 == "ACCESS" { access=(NF == 3 && $2 ~ /^[0-9]+$/ && $3 != "") }
+  $1 == "PROCESS" {
+    record=$2; sub(/^[[:space:]]+/, "", record)
+    fields=split(record, process, /[[:space:]]+/)
+    if (fields < 6 || process[1] !~ /^[1-9][0-9]*$/ || process[2] !~ /^[0-9]+$/ || process[4] !~ /^[0-9]+$/ || process[5] !~ /^[0-9]+$/) malformed=1
+    processes++
+  }
+  END { exit !(host && access && processes > 0 && !malformed) }
+' "$observer_work/payload"; then
+  printf 'Basic host/account/process inventory is incomplete. Check uname, id, getconf and ps. No upload file was kept.\n' >&2
+  exit 2
+fi
+awk -F '\t' '
+  $1 == "PROCESS" { processes++ }
+  $1 == "RPM" { packages++ }
+  $1 == "RPM_STATUS" { rpm=$2 }
+  $1 == "SOCKET" { sockets++ }
+  END { printf "Collected: processes=%d, RPM=%d (%s), socket records=%d. Missing optional tools are recorded in the file.\n", processes, packages, rpm, sockets }
+' "$observer_work/payload" >&2
 observer_hash=$(sha256sum "$observer_work/payload" | awk '{print $1}')
 {
-  printf 'OBSERVER_OFFLINE\t1\nVERSION\t1.10.1\nCOLLECTED_AT\t%s\nSHA256\t%s\n\n' "$observer_time" "$observer_hash"
+  printf 'OBSERVER_OFFLINE\t1\nVERSION\t1.11.0\nCOLLECTED_AT\t%s\nSHA256\t%s\n\n' "$observer_time" "$observer_hash"
   cat "$observer_work/payload"
 } > "$observer_result"
 observer_success=1

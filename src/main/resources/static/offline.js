@@ -15,7 +15,8 @@ async function offlineView() {
 
 function offlinePreviewHtml(data, creating) {
   const host = data.host;
-  return `<div class="import-preview"><h3>수집 결과</h3><dl class="import-facts"><dt>수집 호스트</dt><dd>${esc(host.name)}</dd><dt>수집 시각</dt><dd>${date(data.collectedAt)}</dd><dt>실행 범위</dt><dd>${esc(host.scope)}</dd><dt>수집 항목</dt><dd>프로세스 ${number(data.processes)} · JVM ${number(data.jvms)} · 컨테이너 ${number(data.containers)} · RPM ${number(data.rpmPackages)} · 포트 ${number(data.sockets)}</dd></dl>
+  return `<div class="import-preview"><h3>수집 결과</h3><dl class="import-facts"><dt>수집 호스트</dt><dd>${esc(host.name)}</dd><dt>운영체제</dt><dd>${esc(data.distribution || "미확인")}</dd><dt>수집 시각</dt><dd>${date(data.collectedAt)}</dd><dt>실행 범위</dt><dd>${esc(host.scope)}</dd><dt>수집 항목</dt><dd>프로세스 ${number(data.processes)} · JVM ${number(data.jvms)} · 컨테이너 ${number(data.containers)} · RPM ${number(data.rpmPackages)} · 포트 ${number(data.sockets)}</dd></dl>
+    ${osSupportBanner(data.osSupport)}
     <details><summary>수집 제한 ${number(data.issues.length)}건 확인</summary><ul>${data.issues.map(i => `<li>${esc(i.layer)} · ${esc(i.target)}: ${esc(i.message)}</li>`).join("")}</ul></details>
     ${data.duplicate.id ? '<p class="note">이미 반영된 파일입니다. 같은 자산에 다시 반영하면 기존 이력으로 안내합니다.</p>' : ""}
     ${data.identityMismatch ? `<label class="check note warn"><input name="confirmIdentity" type="checkbox" required>이전 수집 호스트 ${esc(data.expectedHost)}와 현재 ${esc(host.name)}가 같은 서버인지 확인했습니다.</label>` : ""}

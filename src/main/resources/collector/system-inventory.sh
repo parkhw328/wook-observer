@@ -43,7 +43,15 @@ elif ! command -v timeout >/dev/null 2>&1; then
   printf 'RPM_STATUS\tNO_TIMEOUT\n'
 else
   (
-    timeout -k 2 20 rpm -qa --qf 'RPM\t%{NAME}\t%{EPOCH}\t%{VERSION}\t%{RELEASE}\t%{ARCH}\t%{SOURCERPM}\t%|MODULARITYLABEL?{%{MODULARITYLABEL}}:{}|\t%{VENDOR}\n' 2>/dev/null
+    # RPM 4.11 (EL7) rejects an unknown tag even inside a conditional and may exit 0.
+    # Detect the tag before querying, within the same overall time limit.
+    timeout -k 2 20 sh -c '
+      rpm_module=""
+      if rpm --querytags 2>/dev/null | awk '\''$0 == "MODULARITYLABEL" { found=1 } END { exit !found }'\''; then
+        rpm_module="%|MODULARITYLABEL?{%{MODULARITYLABEL}}:{}|"
+      fi
+      exec rpm -qa --qf "RPM\\t%{NAME}\\t%{EPOCH}\\t%{VERSION}\\t%{RELEASE}\\t%{ARCH}\\t%{SOURCERPM}\\t${rpm_module}\\t%{VENDOR}\\n"
+    ' 2>/dev/null
     system_rc=$?
     case "$system_rc" in
       0) printf '\nRPM_STATUS\tCOLLECTED\n';;
@@ -55,6 +63,7 @@ else
     /^RPM_STATUS\t/ { status=$0 }
     END {
       if (limited || status == "") print "RPM_STATUS\tTRUNCATED";
+      else if (count == 0 && status == "RPM_STATUS\tCOLLECTED") print "RPM_STATUS\tFAILED";
       else print status;
     }'
 fi
@@ -105,14 +114,16 @@ else
     for socket_protocol in tcp udp; do
       (
         if [ "$socket_protocol" = tcp ]; then
-          timeout -k 2 5 ss -H -lntp 2>/dev/null
+          timeout -k 2 5 ss -lntp 2>/dev/null
         else
-          timeout -k 2 5 ss -H -naup 2>/dev/null
+          timeout -k 2 5 ss -naup 2>/dev/null
         fi
         socket_rc=$?
         printf '\nSOCKET_QUERY_STATUS\t%s\t%s\n' "$socket_protocol" "$socket_rc"
       ) | awk -v protocol="$socket_protocol" '
         /^SOCKET_QUERY_STATUS\t/ { print; next }
+        # Older iproute2 has no -H option. Skip only the known column header.
+        $1 == "State" || $1 == "Netid" { next }
         NF { printf "SOCKET\t%s\t%s\n", protocol, $0 }
       '
     done

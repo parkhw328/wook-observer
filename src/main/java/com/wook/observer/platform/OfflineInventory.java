@@ -38,10 +38,10 @@ public class OfflineInventory {
             String text = StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
                     .onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes)).toString();
             int boundary = text.indexOf("\n\n");
-            if (boundary < 0 || boundary > 512) throw invalid();
+            if (boundary < 0 || boundary > 512) throw invalid("파일 헤더가 없거나 손상되었습니다.");
             String[] header = text.substring(0, boundary).split("\n", -1);
             if (header.length != 4 || !header[0].equals("OBSERVER_OFFLINE\t1") || !header[1].matches("VERSION\t[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}")
-                    || !header[2].startsWith("COLLECTED_AT\t") || !header[3].matches("SHA256\t[0-9a-f]{64}")) throw invalid();
+                    || !header[2].startsWith("COLLECTED_AT\t") || !header[3].matches("SHA256\t[0-9a-f]{64}")) throw invalid("파일 형식 버전·수집 시각·해시 헤더를 확인할 수 없습니다.");
             Instant collected = Instant.parse(header[2].substring(13));
             if (collected.isBefore(Instant.parse("2000-01-01T00:00:00Z")) || collected.isAfter(Instant.now().plusSeconds(600))) {
                 throw new ApiProblem(400, "수집 시각을 확인하세요. 대상 서버 시계가 현재보다 10분 이상 미래이면 반입할 수 없습니다.");
@@ -61,12 +61,13 @@ public class OfflineInventory {
                 if (line.isEmpty()) continue; // Bounded shell queries may emit an empty separator.
                 if (line.length() > 131072) throw invalid();
                 String type = line.split("\t", 2)[0];
-                if (!LIMITS.containsKey(type) || counts.merge(type, 1, Integer::sum) > LIMITS.get(type)) throw invalid();
+                if (!LIMITS.containsKey(type)) throw invalid("알 수 없는 레코드가 있습니다 (본문 " + lineCount + "행).");
+                if (counts.merge(type, 1, Integer::sum) > LIMITS.get(type)) throw invalid(type + " 레코드가 허용 개수를 초과했습니다.");
                 if (type.equals("SCOPE") && !line.matches("SCOPE\t(host|container)")) throw invalid();
                 if (type.equals("HOST")) {
                     String[] fields = line.split("\t", -1);
-                    if (fields.length != 6 || fields[1].isBlank() || fields[1].length() > 253
-                            || fields[2].length() > 256 || fields[3].length() > 64 || !fields[4].matches("[1-9][0-9]{0,6}")) throw invalid();
+                    if (fields.length != 6 || fields[1].length() > 253
+                            || fields[2].length() > 256 || fields[3].length() > 64 || !fields[4].matches("[1-9][0-9]{0,6}")) throw invalid("HOST 기본 정보가 불완전합니다. 최신 SH로 다시 수집하세요.");
                     double memory = Double.parseDouble(fields[5]);
                     if (!Double.isFinite(memory) || memory < 0 || memory >= Long.MAX_VALUE) throw invalid();
                 }
@@ -83,7 +84,7 @@ public class OfflineInventory {
                 if (type.equals("PROCESS")) {
                     String[] fields = line.substring(8).strip().split("\\s+", 6);
                     if (fields.length != 6 || !fields[0].matches("[1-9][0-9]{0,9}") || !fields[1].matches("[0-9]{1,10}")
-                            || !fields[3].matches("[0-9]{1,15}") || !fields[4].matches("[0-9]{1,8}") || !pids.add(fields[0])) throw invalid();
+                            || !fields[3].matches("[0-9]{1,15}") || !fields[4].matches("[0-9]{1,8}") || !pids.add(fields[0])) throw invalid("프로세스 정보가 불완전하거나 중복되었습니다 (본문 " + lineCount + "행). 구형 ps 호환성을 위해 최신 SH로 다시 수집하세요.");
                 }
             }
             if (!List.of("HOST", "ACCESS", "SCOPE", "DONE").stream().allMatch(key -> counts.getOrDefault(key, 0) == 1)) throw invalid();
@@ -104,8 +105,10 @@ public class OfflineInventory {
                     host.architecture(), host.processors(), host.physicalMemoryBytes(), host.scope().replace("SSH ", "파일 업로드 · "), host.dockerVersion()),
                     report.processes(), report.javaProcesses(), report.containers(), issues, facts, null, report.systemInventory()), hash);
         } catch (ApiProblem problem) {
-            if (problem.status == 502) throw invalid();
+            if (problem.status == 502) throw invalid(problem.getMessage());
             throw problem;
+        } catch (java.nio.charset.CharacterCodingException exception) {
+            throw invalid("파일이 UTF-8 형식이 아닙니다. 내용을 변환하지 않은 원본 파일을 선택하세요.");
         } catch (Exception exception) { throw invalid(); }
     }
 
@@ -114,5 +117,6 @@ public class OfflineInventory {
         catch (java.security.NoSuchAlgorithmException e) { throw new IllegalStateException(e); }
     }
     private static ApiProblem invalid() { return new ApiProblem(400, "지원하는 완전한 Observer 수집 결과가 아닙니다. 수집용 .sh가 만든 원본 .observer 파일을 선택하세요."); }
+    private static ApiProblem invalid(String reason) { return new ApiProblem(400, "수집 결과를 읽을 수 없습니다. " + reason); }
     public record Parsed(Observation report, String sha256) { }
 }

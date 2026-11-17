@@ -9,6 +9,17 @@ import static org.assertj.core.api.Assertions.*;
 
 class AssetMarkdownTest {
     @Test
+    void includesLegacyOsUpgradeActionAndConditionalElsWithoutAddingVulnerabilityFindings() {
+        var summary = new com.wook.observer.platform.ServiceDiscovery.Summary(
+                new com.wook.observer.model.Observation.Host("legacy", "Linux", "3.10", "x86_64", 2, 1024, "fixture", ""),
+                "Red Hat Enterprise Linux Server 7.9 (Maipo)", "UNAVAILABLE", "ss unavailable", 1, 0, 1, null);
+        var asset = Map.<String, Object>of("name", "기존 RHEL 자산", "inventory", summary, "finding_count", 0);
+        String report = AssetMarkdown.write(List.of(asset), a -> List.of());
+        assertThat(report).contains("OS 업그레이드 필요", "정규 유지보수 종료", "2024-06-30", "2029-05-31", "계약", "미확인",
+                "https://access.redhat.com/articles/7005471", "| 최근 완료 점검의 발견·의심 | 0 |");
+    }
+
+    @Test
     void includesUnscannedAndArchivedRunbooksAndSafelyPreservesMultilineCommands() {
         var asset = Map.<String, Object>of("name", "<script>server</script>", "host", "offline", "location", "IDC | 2층\n랙 3", "notes", "![tracking](https://example.com)");
         String command = "echo ```quoted```\nprintf '한글|<x>'\n" + "긴 명령".repeat(1000);

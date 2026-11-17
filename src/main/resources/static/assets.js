@@ -1,7 +1,7 @@
 "use strict";
 const environments = {UNSPECIFIED: "미지정", PRODUCTION: "운영", STAGING: "검증", DEVELOPMENT: "개발", TEST: "테스트"};
 const lifecycles = {ACTIVE: "운영", MAINTENANCE: "유지보수", RETIRED: "폐기·사용 종료"};
-const serviceTypes = {OTHER: "미분류", MIDDLEWARE: "미들웨어", APPLICATION: "애플리케이션", COMMON: "공통·보안·백업"};
+const serviceTypes = {OTHER: "미분류", MIDDLEWARE: "미들웨어", APPLICATION: "애플리케이션", COMMON: "공통·보안·백업", WEB: "웹 서버", DATABASE: "데이터베이스", CONTAINER: "컨테이너", CACHE: "캐시", MESSAGING: "메시징", INFRASTRUCTURE: "인프라"};
 let assetQuery = "", assetEnvironment = "", assetFilter = "", assetDetail = null;
 let serviceQuery = "", serviceFilter = "active", serviceColumns = "operations", excludeSystemServices = false, editingService = null;
 const assetLink = id => "#assets/" + encodeURIComponent(id);
@@ -16,7 +16,15 @@ function assetKpis(summary) {
     <article class="kpi"><p>서비스 후보·등록</p><strong>${number(summary.services)}</strong><small>보관 처리한 항목 제외</small></article>
     <article class="kpi ${summary.undocumented ? "alert" : ""}"><p>운영 절차 보완</p><strong>${number(summary.undocumented)}</strong><small>시작·종료·상태 확인 방법 미입력</small></article>
     <article class="kpi ${summary.findings ? "alert" : ""}"><p>자산별 최근 발견·의심</p><strong>${number(summary.findings)}</strong><small>자산마다 최근 완료 점검 1회 기준</small></article>
-  </div>`;
+  </div>${summary.osUpgrade ? `<div class="os-upgrade-notice" role="status"><div><strong>OS 업그레이드 필요 ${number(summary.osUpgrade)}대</strong><span>지원 종료 또는 정규 유지보수가 종료된 자산을 확인하세요.</span></div><button type="button" data-action="show-os-upgrades">대상 자산 보기</button></div>` : ""}`;
+}
+
+function osSupportBadge(support) {
+  return support?.upgradeRequired ? `<div class="os-support-badge"><span class="badge bad" title="${esc(support.label + " · " + support.endedOn + " · " + support.note)}">OS 업그레이드 필요</span></div>` : "";
+}
+function osSupportBanner(support) {
+  if (!support?.upgradeRequired) return "";
+  return `<div class="note os-support-notice" role="status"><strong>OS 업그레이드 필요 · ${esc(support.label)}</strong><p>종료일 ${esc(support.endedOn)} · ${esc(support.note)}</p><div>${esc(support.action)}</div><div class="small"><a href="${esc(support.sourceUrl)}" target="_blank" rel="noopener noreferrer">공식 지원 정책</a> · 정책 확인 ${esc(support.policyVerifiedOn)} · 판정 기준 ${esc(support.evaluatedOn)} · CVE 발견 건수와 별도로 관리합니다.</div></div>`;
 }
 
 function assetTable(items) {
@@ -24,7 +32,7 @@ function assetTable(items) {
   return table(["서버 / 자산번호", "환경 / 담당", "OS / 자원", "서비스 / 절차 보완", "최근 점검 / 발견·의심", "관리"], items.map(a => `<tr>
     <td><a href="${assetLink(a.id)}"><b>${esc(a.name)}</b></a><div class="small">${esc(a.host)}</div><div class="small">${esc(a.asset_code || "자산번호 미입력")}</div></td>
     <td>${badge(environments[a.environment] || "미지정")}<div>${filled(a.owner)}</div><div class="small">${esc(lifecycles[a.lifecycle] || "운영")}</div></td>
-    <td>${a.inventory ? `${esc(a.inventory.distribution)}<div class="small">CPU ${a.inventory.host.processors || "미수집"} · ${memory(a.inventory.host.physicalMemoryBytes)}</div>` : '<span class="muted">점검 전 · 미수집</span>'}</td>
+    <td>${a.inventory ? `${esc(a.inventory.distribution)}${osSupportBadge(a.os_support)}<div class="small">CPU ${a.inventory.host.processors || "미수집"} · ${memory(a.inventory.host.physicalMemoryBytes)}</div>` : '<span class="muted">점검 전 · 미수집</span>'}</td>
     <td>${number(a.service_count)}개<div class="small">절차 보완 ${number(a.undocumented_count)}개</div></td>
     <td>${a.latest_status ? badge(a.latest_status) : badge("점검 전")}<div class="small">최근 수집 ${date(a.observed_at)}</div>${a.job_id ? `<span>${number(a.finding_count)}건</span>` : ""}</td>
     <td><a class="button" href="${assetLink(a.id)}">자산 열기</a></td></tr>`));
@@ -47,9 +55,9 @@ async function assetView() {
   const {items, summary} = await api("/assets");
   const selected = items.filter(a => (!query || [a.name, a.host, a.asset_code, a.owner, a.location, a.purpose, a.inventory?.distribution].join(" ").toLocaleLowerCase().includes(query))
     && (!environment || (a.environment || "UNSPECIFIED") === environment)
-    && (!filter || (filter === "unscanned" && !a.job_id) || (filter === "undocumented" && a.undocumented_count > 0) || (filter === "failed" && a.latest_status === "FAILED")));
+    && (!filter || (filter === "os-upgrade" && a.os_support?.upgradeRequired) || (filter === "unscanned" && !a.job_id) || (filter === "undocumented" && a.undocumented_count > 0) || (filter === "failed" && a.latest_status === "FAILED")));
   return pageHead("자산 관리", "서버별 자산 정보와 서비스 운영대장을 함께 관리하세요.", `${admin() ? '<a class="button primary" href="#offline">수집 결과 업로드</a>' : ''}<a class="button" href="#assets/report">전체 자산 MD 보고서</a><button data-asset-export="" title="검색 조건과 관계없이 저장된 전체 자산·서비스를 내려받습니다.">전체 자산 XLSX</button><a class="button" href="#targets">점검 대상 관리 →</a>`) + assetKpis(summary)
-    + `<section class="panel"><form id="asset-search" class="asset-filters"><label>자산 검색<input name="query" maxlength="200" value="${esc(assetQuery)}" placeholder="서버·주소·자산번호·담당자"></label><label>환경<select name="environment"><option value="">전체 환경</option>${options(environments, environment)}</select></label><label>보완 상태<select name="filter">${options({"": "전체 자산", unscanned: "점검 전", undocumented: "운영 절차 보완", failed: "최근 점검 실패"}, filter)}</select></label><button type="submit">검색</button></form><div class="panel-title"><h2>자산 목록</h2><span class="small">검색 ${number(selected.length)} / 전체 ${number(items.length)}대</span></div>${assetTable(selected)}</section>`;
+    + `<section class="panel"><form id="asset-search" class="asset-filters"><label>자산 검색<input name="query" maxlength="200" value="${esc(assetQuery)}" placeholder="서버·주소·자산번호·담당자"></label><label>환경<select name="environment"><option value="">전체 환경</option>${options(environments, environment)}</select></label><label>보완 상태<select name="filter">${options({"": "전체 자산", "os-upgrade": "OS 업그레이드 필요", unscanned: "점검 전", undocumented: "운영 절차 보완", failed: "최근 점검 실패"}, filter)}</select></label><button type="submit">검색</button></form><div class="panel-title"><h2>자산 목록</h2><span class="small">검색 ${number(selected.length)} / 전체 ${number(items.length)}대</span></div>${assetTable(selected)}</section>`;
 }
 
 function assetProfile(a) {
@@ -68,7 +76,7 @@ function assetDetailHtml(data) {
   return pageHead(a.name, `${a.host} · ${a.asset_code || "자산번호 미입력"}`, `<a class="button" href="#assets">자산 목록</a><a class="button" href="#assets/report/${encodeURIComponent(a.id)}">자산 MD 보고서</a><button data-asset-export="${esc(a.id)}" title="이 자산의 저장된 전체 서비스(보관 포함)를 내려받습니다.">자산 XLSX</button><button data-action="refresh-asset">새로고침</button>${admin() ? `<a class="button" href="#offline/${encodeURIComponent(a.id)}">결과 업로드</a>` : ""}${a.collection_mode === "UPLOAD" ? `<a class="button" href="/api/collector/observer-collect.sh">수집 SH 다운로드</a>` : `<button class="primary" data-action="scan" data-id="${esc(a.id)}" ${["RUNNING", "QUEUED"].includes(a.latest_status) ? "disabled" : ""}>점검 시작</button>`}`, true)
     + (a.latest_status === "FAILED" ? `<div class="note warn">최근 점검 실패 · ${esc(a.latest_message)} 기존 수집 정보는 ${date(a.observed_at)} 기준입니다.</div>` : "")
     + `<div class="asset-summary panel"><div><span class="small">수집된 호스트 / OS</span><b>${esc(i?.host.name || "미수집")}</b><span>${esc(i?.distribution || "점검 후 표시됩니다")}</span></div><div><span class="small">CPU / 메모리</span><b>${i ? (i.host.processors || "미수집") + " CPU · " + memory(i.host.physicalMemoryBytes) : "미수집"}</b><span>${esc(i?.host.architecture || "")}</span></div><div><span class="small">수집 기준 시각</span><b>${date(a.observed_at)}</b><span>${a.latest_status ? badge(a.latest_status) : "점검 전"} ${a.job_id ? `· 발견·의심 ${number(a.finding_count)}건` : ""}</span></div></div>`
-    + assetProfile(a)
+    + osSupportBanner(a.os_support) + assetProfile(a)
     + `<section class="panel"><div class="panel-title"><div><h2>서비스 운영대장</h2><p class="small">서비스·포트·실행계정·경로와 운영 절차를 한 행에서 관리합니다.</p></div>${admin() ? '<button class="primary" data-action="add-service">+ 수동 서비스</button>' : '<span class="badge">조회 권한</span>'}</div>
     <div class="note">자동 수집은 최근 점검의 관측값입니다. 시작·종료·상태 확인 방법은 기록용이며 실행되지 않습니다. 수기 정보는 재점검 후에도 유지됩니다.${i ? `<br>포트 수집: ${esc({COLLECTED:"수집 완료", NOT_COLLECTED:"미수집", FAILED:"조회 실패", UNAVAILABLE:"도구 없음", TIMEOUT:"시간 제한", TRUNCATED:"일부 수집"}[i.socketStatus] || i.socketStatus)} · ${esc(i.socketMessage)} · 수집 제한 ${number(i.issueCount)}건` : ""}</div>
     <form id="service-search" class="asset-filters"><label>서비스 검색<input name="query" maxlength="200" value="${esc(serviceQuery)}" placeholder="서비스·SW·담당·포트·경로"></label><label>표시 항목<select name="filter">${options({active:"관리 중", undocumented:"절차 보완", unobserved:"최근 수집 미확인", archived:"보관함", all:"전체"}, serviceFilter)}</select></label><button type="submit">검색</button></form><div id="service-grid">${serviceGrid(data.services)}</div></section>`
@@ -251,6 +259,12 @@ function setAssetBusy(busy) {
 }
 
 document.addEventListener("click", async event => {
+  if (event.target.closest('[data-action="show-os-upgrades"]')) {
+    if (hasAssetDraft()) return;
+    assetQuery = ""; assetEnvironment = ""; assetFilter = "os-upgrade";
+    if (location.hash === "#assets") await render(); else location.hash = "#assets";
+    return;
+  }
   const button = event.target.closest("[data-action]");
   if (!button || button.disabled) return;
   if (button.dataset.action === "edit-service") editService(button.dataset.id);

@@ -18,6 +18,25 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class AssetWorkbookTest {
     @Test
+    void exportsLifecycleEvidenceForOldAssetsWithoutDroppingExistingColumns() throws Exception {
+        var summary = new com.wook.observer.platform.ServiceDiscovery.Summary(
+                new com.wook.observer.model.Observation.Host("legacy", "Linux", "3.10", "x86_64", 2, 1024, "fixture", ""),
+                "CentOS Linux 7 (Core)", "UNAVAILABLE", "ss unavailable", 1, 0, 1, null);
+        var asset = Map.<String, Object>of("id", "legacy-1", "name", "구형 자산", "inventory", summary, "finding_count", 0);
+        var output = new java.io.ByteArrayOutputStream();
+        new AssetWorkbook().write(List.of(asset), a -> List.of(), output);
+        try (var book = new org.apache.poi.xssf.usermodel.XSSFWorkbook(new java.io.ByteArrayInputStream(output.toByteArray()))) {
+            var sheet = book.getSheet("자산 목록");
+            assertThat(sheet.getRow(0).getCell(23).getStringCellValue()).isEqualTo("OS 지원 상태");
+            assertThat(sheet.getRow(1).getCell(22).getStringCellValue()).isEqualTo("legacy-1");
+            assertThat(sheet.getRow(1).getCell(23).getStringCellValue()).contains("지원 종료");
+            assertThat(sheet.getRow(1).getCell(24).getStringCellValue()).contains("OS 업그레이드 필요");
+            assertThat(sheet.getRow(1).getCell(25).getStringCellValue()).isEqualTo("2024-06-30");
+            assertThat(sheet.getRow(1).getCell(28).getStringCellValue()).isEqualTo("https://centos.org/centos-linux/");
+        }
+    }
+
+    @Test
     void exportsSavedManualFieldsObservationEvidenceAndArchivedServicesAsLiteralText() throws Exception {
         var asset = new HashMap<String, Object>(Map.of("id", "asset-1", "name", "운영 서버", "host", "192.0.2.10", "asset_code", "000123", "private_key", "must-never-be-exported"));
         var observed = new ServiceDiscovery.Candidate("key", "PROCESS", "nginx", "웹", List.of("TCP 0.0.0.0:443", "TCP [::]:443"),

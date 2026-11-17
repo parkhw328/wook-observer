@@ -1,6 +1,7 @@
 package com.wook.observer.report;
 
 import com.wook.observer.platform.ServiceDiscovery;
+import com.wook.observer.platform.OsLifecycle;
 
 import java.time.Instant;
 import java.util.List;
@@ -15,6 +16,7 @@ public final class AssetMarkdown {
             Map.entry("DEVELOPMENT", "개발"), Map.entry("TEST", "테스트"), Map.entry("ACTIVE", "운영"),
             Map.entry("MAINTENANCE", "유지보수"), Map.entry("RETIRED", "폐기·사용 종료"), Map.entry("OTHER", "미분류"),
             Map.entry("MIDDLEWARE", "미들웨어"), Map.entry("APPLICATION", "애플리케이션"), Map.entry("COMMON", "공통·보안·백업"),
+            Map.entry("WEB", "웹 서버"), Map.entry("DATABASE", "데이터베이스"), Map.entry("CONTAINER", "컨테이너"), Map.entry("CACHE", "캐시"), Map.entry("MESSAGING", "메시징"), Map.entry("INFRASTRUCTURE", "인프라"),
             Map.entry("OBSERVED", "최근 수집 확인"), Map.entry("NOT_OBSERVED", "최근 수집 미확인"), Map.entry("MANUAL", "수동 등록"),
             Map.entry("COMPLETED", "완료"), Map.entry("FAILED", "실패"), Map.entry("RUNNING", "진행 중"), Map.entry("QUEUED", "대기"));
 
@@ -23,8 +25,13 @@ public final class AssetMarkdown {
         out.append("작성 시각 (UTC): ").append(Instant.now()).append("\n\n")
                 .append("등록 자산 ").append(assets.size()).append("대. 저장된 자산 정보와 전체 서비스(시스템 서비스·보관 포함)를 제공합니다. 화면 검색·제외 필터는 적용하지 않습니다.\n\n")
                 .append("수기 운영 절차는 기록이며 실행되지 않습니다. 자동 관측은 서버별 수집 시각 기준이며 미관측은 중지·삭제를 의미하지 않습니다.\n\n")
-                .append("## 자산 목록\n\n| 서버명 | 주소 | 자산번호 | 서버 위치 | 담당 | 최근 수집 (UTC) |\n| --- | --- | --- | --- | --- | --- |\n");
-        for (var asset : assets) row(out, value(asset, "name"), value(asset, "host"), value(asset, "asset_code"), value(asset, "location"), value(asset, "owner"), value(asset, "observed_at"));
+                .append("OS 지원 상태는 저장된 OS 근거와 문서 생성 시점의 내장 정책 기준입니다. 개별 연장 지원 계약은 미확인이며 CVE 발견 건수와 별도로 관리합니다.\n\n")
+                .append("## 자산 목록\n\n| 서버명 | 주소 | 자산번호 | 서버 위치 | 담당 | 최근 수집 (UTC) | OS 지원 상태 |\n| --- | --- | --- | --- | --- | --- | --- |\n");
+        for (var asset : assets) {
+            var support = OsLifecycle.forSummary((ServiceDiscovery.Summary) asset.get("inventory"));
+            row(out, value(asset, "name"), value(asset, "host"), value(asset, "asset_code"), value(asset, "location"), value(asset, "owner"),
+                    value(asset, "observed_at"), support.upgradeRequired() ? "OS 업그레이드 필요 · " + support.label() : support.label());
+        }
         if (assets.isEmpty()) out.append("\n등록한 자산이 없습니다.\n");
         int index = 0;
         for (var asset : assets) {
@@ -42,6 +49,13 @@ public final class AssetMarkdown {
             row(out, "최근 시도 상태", label(asset, "latest_status", "점검 전")); field(out, "최근 시도 메시지", asset, "latest_message");
             row(out, "관측 호스트", summary == null ? "미수집" : summary.host().name());
             row(out, "OS", summary == null ? "미수집" : summary.distribution());
+            var support = OsLifecycle.forSummary(summary);
+            row(out, "OS 지원 상태", support.label());
+            row(out, "OS 전환 조치", support.action()); row(out, "OS 지원 범위", support.note());
+            if (!support.endedOn().isEmpty()) row(out, "공식 종료일", support.endedOn());
+            if (!support.extendedUntil().isEmpty()) row(out, "조건부 ELS 종료일 · 계약 미확인", support.extendedUntil());
+            if (!support.sourceUrl().isEmpty()) row(out, "공식 지원 정책 출처", support.sourceUrl());
+            row(out, "지원 정책 확인 / 판정 기준", support.policyVerifiedOn() + " / " + support.evaluatedOn());
             row(out, "CPU / 메모리", summary == null ? "미수집" : summary.host().processors() + " CPU / " + summary.host().physicalMemoryBytes() + " bytes");
             row(out, "아키텍처", summary == null ? "미수집" : summary.host().architecture());
             row(out, "수집 범위", summary == null ? "미수집" : summary.host().scope());

@@ -1,6 +1,7 @@
 package com.wook.observer.report;
 
 import com.wook.observer.platform.ServiceDiscovery;
+import com.wook.observer.platform.OsLifecycle;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.xssf.streaming.SXSSFWorkbook;
@@ -21,7 +22,8 @@ public class AssetWorkbook {
             Map.entry("DEVELOPMENT", "개발"), Map.entry("TEST", "테스트"), Map.entry("ACTIVE", "운영"),
             Map.entry("MAINTENANCE", "유지보수"), Map.entry("RETIRED", "폐기·사용 종료"),
             Map.entry("OTHER", "미분류"), Map.entry("MIDDLEWARE", "미들웨어"), Map.entry("APPLICATION", "애플리케이션"),
-            Map.entry("COMMON", "공통·보안·백업"), Map.entry("MANUAL", "수동 등록"), Map.entry("AUTO", "자동 후보"),
+            Map.entry("COMMON", "공통·보안·백업"),
+            Map.entry("WEB", "웹 서버"), Map.entry("DATABASE", "데이터베이스"), Map.entry("CONTAINER", "컨테이너"), Map.entry("CACHE", "캐시"), Map.entry("MESSAGING", "메시징"), Map.entry("INFRASTRUCTURE", "인프라"), Map.entry("MANUAL", "수동 등록"), Map.entry("AUTO", "자동 후보"),
             Map.entry("OBSERVED", "최근 수집 확인"), Map.entry("NOT_OBSERVED", "최근 수집 미확인"),
             Map.entry("COMPLETED", "완료"), Map.entry("FAILED", "실패"), Map.entry("RUNNING", "진행 중"), Map.entry("QUEUED", "대기"));
 
@@ -42,7 +44,8 @@ public class AssetWorkbook {
             Table guide = new Table(book, header, body, "내보내기 안내", 1, "항목", "내용");
             Table inventory = new Table(book, header, body, "자산 목록", 3,
                     "서버명", "접속 주소", "자산번호", "환경", "담당자", "서버 위치", "용도", "운영 상태", "수집 호스트", "OS", "아키텍처", "CPU", "메모리(GiB)",
-                    "최근 수집 시각(UTC)", "최근 점검 상태", "최근 점검 메시지", "관리 서비스 수", "절차 보완 수", "발견·의심 수", "자산 메모", "수정자", "수정 시각(UTC)", "자산 ID");
+                    "최근 수집 시각(UTC)", "최근 점검 상태", "최근 점검 메시지", "관리 서비스 수", "절차 보완 수", "발견·의심 수", "자산 메모", "수정자", "수정 시각(UTC)", "자산 ID",
+                    "OS 지원 상태", "OS 전환 조치", "공식 종료일", "조건부 ELS 종료일", "지원 범위 / 계약 확인", "공식 정책 출처", "정책 확인일", "지원 판정 기준일");
             Table runbook = new Table(book, header, body, "서비스 운영대장", 3,
                     "서버명", "접속 주소", "자산번호", "서비스명", "구분", "SW", "버전", "담당파트", "실행계정", "APP / 설치위치", "DATA", "LOG",
                     "자동 관측 포트", "운영 포트 / 보완", "시작 방법", "종료 방법", "상태 확인 방법", "연계 대상 / 방향", "메모", "관측 상태", "보관 여부",
@@ -52,13 +55,16 @@ public class AssetWorkbook {
             long count = 0, archived = 0;
             for (var asset : assets) {
                 var observed = (ServiceDiscovery.Summary) asset.get("inventory");
+                var support = OsLifecycle.forSummary(observed);
                 inventory.add(text(asset, "name"), text(asset, "host"), text(asset, "asset_code"), label(asset, "environment", "미지정"), text(asset, "owner"),
                         text(asset, "location"), text(asset, "purpose"), label(asset, "lifecycle", "운영"), observed == null ? "미수집" : observed.host().name(),
                         observed == null ? "미수집" : observed.distribution(), observed == null ? "" : observed.host().architecture(),
                         observed == null || observed.host().processors() <= 0 ? "미수집" : observed.host().processors(),
                         observed == null || observed.host().physicalMemoryBytes() <= 0 ? "미수집" : observed.host().physicalMemoryBytes() / (double) (1L << 30),
                         text(asset, "observed_at"), label(asset, "latest_status", "점검 전"), text(asset, "latest_message"), asset.get("service_count"), asset.get("undocumented_count"),
-                        asset.get("finding_count"), text(asset, "notes"), text(asset, "updated_by"), text(asset, "updated_at"), text(asset, "id"));
+                        asset.get("finding_count"), text(asset, "notes"), text(asset, "updated_by"), text(asset, "updated_at"), text(asset, "id"),
+                        support.label(), support.action(), support.endedOn(), support.extendedUntil(), support.note(), support.sourceUrl(),
+                        support.policyVerifiedOn(), support.evaluatedOn());
                 for (var service : services.apply(asset)) {
                     count++;
                     boolean isArchived = Boolean.TRUE.equals(service.get("archived"));
@@ -88,6 +94,7 @@ public class AssetWorkbook {
             guide.add("관측과 수기", "자동 관측 포트·PID는 최근 저장 근거이며 실시간 상태가 아닙니다. 운영 포트·경로·시작/종료/상태 확인 방법은 운영자가 작성한 정보입니다. 명령은 실행하지 않습니다.");
             guide.add("전체 값", "화면에서 축약한 주소·Docker 매핑·PID는 포트·PID 상세 시트에 항목별로 보존합니다. 긴 원문 값은 순번·조각 번호 순으로 구분자 없이 이어 붙이면 복원됩니다. 빈 자동 관측 포트는 미확인입니다.");
             guide.add("과거 보고서", "다운로드 시점의 저장된 운영대장입니다. 과거 점검 보고서·판정을 변경하거나 서버에 다시 접속하지 않습니다. 시각은 UTC입니다.");
+            guide.add("OS 지원 상태", "저장된 OS 근거와 문서 생성 시점의 내장 정책 기준입니다. RHEL 7 ELS 계약·적용 여부와 제3자 지원은 미확인입니다. 정책 미확인은 지원 중이라는 뜻이 아니며 CVE 발견 건수와 별도로 관리합니다.");
             for (var table : List.of(guide, inventory, runbook, evidence)) table.finish();
             guide.sheet.setColumnWidth(1, 100 * 256);
             evidence.sheet.setColumnWidth(5, 70 * 256);

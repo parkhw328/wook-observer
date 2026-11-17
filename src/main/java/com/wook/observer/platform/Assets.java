@@ -47,6 +47,7 @@ public class Assets {
                 "unscanned", rows.stream().filter(row -> row.get("job_id") == null).count(),
                 "inProgress", rows.stream().filter(row -> Set.of("RUNNING", "QUEUED").contains(Store.string(row, "latest_status"))).count(),
                 "failed", rows.stream().filter(row -> "FAILED".equals(row.get("latest_status"))).count(),
+                "osUpgrade", rows.stream().filter(row -> ((OsLifecycle.Support) row.get("os_support")).upgradeRequired()).count(),
                 "services", rows.stream().mapToLong(row -> ((Number) row.get("service_count")).longValue()).sum(),
                 "undocumented", rows.stream().mapToLong(row -> ((Number) row.get("undocumented_count")).longValue()).sum(),
                 "findings", rows.stream().filter(row -> row.get("finding_count") != null).mapToLong(row -> ((Number) row.get("finding_count")).longValue()).sum()));
@@ -90,8 +91,31 @@ public class Assets {
     private Map<String, Object> asset(Map<String, Object> row) {
         String summary = Store.string(row, "summary_json");
         row.remove("summary_json");
-        row.put("inventory", summary.isEmpty() ? null : json.readValue(summary, ServiceDiscovery.Summary.class));
+        var inventory = summary.isEmpty() ? null : json.readValue(summary, ServiceDiscovery.Summary.class);
+        row.put("inventory", inventory);
+        row.put("os_support", OsLifecycle.forSummary(inventory));
         return row;
+    }
+
+    /** Enrich only the current projection; never reassess or rewrite a saved inspection report. */
+    public int enrichOsIdentity() {
+        int changed = 0;
+        for (var row : store.rows("SELECT target_id, job_id, summary_json FROM asset_inventory")) {
+            try {
+                String saved = Store.string(row, "summary_json");
+                var summary = json.readValue(saved, ServiceDiscovery.Summary.class);
+                if (summary.osIdentity() != null) continue;
+                var report = json.readValue(Store.string(store.one("SELECT report_json FROM scan_job WHERE id=?", row.get("job_id")), "report_json"), Observation.class);
+                var identity = OsLifecycle.identify(report);
+                var enriched = new ServiceDiscovery.Summary(summary.host(), identity.displayName(), summary.socketStatus(), summary.socketMessage(),
+                        summary.processCount(), summary.containerCount(), summary.issueCount(), identity);
+                changed += store.jdbc.update("UPDATE asset_inventory SET summary_json=? WHERE target_id=? AND job_id=? AND summary_json=?",
+                        json.writeValueAsString(enriched), row.get("target_id"), row.get("job_id"), saved);
+            } catch (RuntimeException failure) {
+                OperationLog.warn("asset.os_identity.unavailable", "targetId", row.get("target_id"), "errorType", failure.getClass().getSimpleName());
+            }
+        }
+        return changed;
     }
 
     @Transactional
@@ -122,7 +146,7 @@ public class Assets {
         String software = field(input.software(), 200), version = field(input.softwareVersion(), 200), runUser = field(input.runUser(), 120);
         String installPath = field(input.installPath(), 2000), dataPath = field(input.dataPath(), 2000), logPath = field(input.logPath(), 2000);
         String status = field(input.statusCommand(), 4000), dependencies = field(input.dependencies(), 4000);
-        choice(input.serviceType(), Set.of("MIDDLEWARE", "APPLICATION", "COMMON", "OTHER"));
+        choice(input.serviceType(), Set.of("MIDDLEWARE", "APPLICATION", "COMMON", "OTHER", "WEB", "DATABASE", "CONTAINER", "CACHE", "MESSAGING", "INFRASTRUCTURE"));
         boolean create = id == null;
         if (create) {
             checkRevision(input.revision(), 0);

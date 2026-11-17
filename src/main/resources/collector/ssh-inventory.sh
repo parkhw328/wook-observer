@@ -6,7 +6,13 @@ if [ "$(uname -s)" != Linux ]; then
   printf 'ERROR\tLinux target required\n'
   exit 2
 fi
-printf 'HOST\t%s\t%s\t%s\t%s\t%s\n' "$(hostname)" "$(uname -r)" "$(uname -m)" "$(getconf _NPROCESSORS_ONLN)" "$(awk '/MemTotal:/{print $2 * 1024}' /proc/meminfo)"
+observer_hostname=$(hostname 2>/dev/null)
+[ -n "$observer_hostname" ] || observer_hostname=$(uname -n 2>/dev/null)
+if [ -z "$observer_hostname" ]; then
+  printf 'ERROR\tHost name unavailable; cannot identify this server\n'
+  exit 2
+fi
+printf 'HOST\t%s\t%s\t%s\t%s\t%s\n' "$observer_hostname" "$(uname -r)" "$(uname -m)" "$(getconf _NPROCESSORS_ONLN)" "$(awk '/MemTotal:/{printf "%.0f", $2 * 1024}' /proc/meminfo)"
 printf 'ACCESS\t%s\t%s\n' "$(id -u)" "$(id -un)"
 printf 'SCOPE\t%s\n' "$(if [ -f /.dockerenv ] || [ -f /run/.containerenv ]; then echo container; else echo host; fi)"
 if [ -r /etc/os-release ]; then
@@ -14,7 +20,8 @@ if [ -r /etc/os-release ]; then
 fi
 # SYSTEM_INVENTORY
 if ! command -v ps >/dev/null 2>&1; then printf 'ERROR\tps unavailable\n'; exit 2; fi
-ps -eo pid=,ppid=,user=,rss=,nlwp=,comm= | head -n 4097 | sed 's/^/PROCESS\t/'
+# Separate -o arguments also work on procps-ng 3.3.10 (EL7); comma headers do not.
+ps -e -o pid= -o ppid= -o user= -o rss= -o nlwp= -o comm= | head -n 4097 | sed 's/^/PROCESS\t/'
 if command -v docker >/dev/null 2>&1 && command -v timeout >/dev/null 2>&1; then
   dv=$(timeout 5 docker --host unix:///var/run/docker.sock version --format '{{.Server.Version}}' 2>/dev/null)
   if [ -n "$dv" ]; then
@@ -45,7 +52,7 @@ if command -v sshd >/dev/null 2>&1; then
   # Effective global configuration only; Match blocks can override per-connection behavior.
   sshd -T 2>/dev/null | awk '$1=="permitrootlogin" || $1=="passwordauthentication" {printf "FACT\thost:ssh.%s\t%s\n",$1,$2}'
 fi
-java_pids=$(ps -eo pid=,comm= | awk '$2=="java"{print $1}' | head -n 65)
+java_pids=$(ps -e -o pid= -o comm= | awk '$2=="java"{print $1}' | head -n 65)
 count=0
 for pid in $java_pids; do
   count=$((count + 1))
@@ -63,9 +70,10 @@ for pid in $java_pids; do
 done
 if [ -n "$java_pids" ]; then
   if command -v python3 >/dev/null 2>&1; then
-    python3 - <<'PY'
+    if ! python3 - <<'PY'
 # LIBRARY_INVENTORY
 PY
+    then printf 'ISSUE\tjava\tPython library inspection failed or this Python version is unsupported; base inventory is preserved\n'; fi
   else printf 'ISSUE\tjava\tPython 3 unavailable; archive metadata not assessed. Java installation is not required for base inventory.\n'; fi
 fi
 printf 'DONE\n'
