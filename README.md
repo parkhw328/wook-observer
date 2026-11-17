@@ -42,7 +42,7 @@ docker compose ps
 | OS·프로세스 | Linux, SSH, POSIX 셸, `ps` 및 기본 명령. Java 불필요. 접근 가능한 PID 범위만 조사 |
 | OS·커널 상세 | `uname -a/-r/-v/-m`, `/etc/os-release`, `/etc/redhat-release`, `/proc/version`. `base64`로 전송하며 항목당 16 KiB 제한 |
 | 설치 RPM | `rpm`, `timeout`, RPM DB 읽기 권한. 이름·Epoch·버전·Release·아키텍처·소스 RPM·모듈·공급자, 20초·20,000건·4 MiB 제한 |
-| 열린 포트 | `ss`, `timeout`. TCP 리스닝·UDP 바인딩, IPv4/IPv6 주소·포트·상태·확인 가능한 PID/프로세스. 프로토콜별 5초·합계 4,096개·512 KiB 제한 |
+| 네트워크 관측 | `ss` 또는 `netstat`, `timeout`. TCP LISTEN·UDP와 별도로 ESTABLISHED·기타 TCP 상태, 로컬/상대 주소·포트·PID/프로세스·실제 포트 정책. 조회별 5초, 바인딩/연결 각각 4,096개·512 KiB 제한 |
 | Docker | Docker CLI, `timeout`, 로컬 소켓 조회 권한. 컨테이너 정보와 `docker top` PID 연결 |
 | JVM 속성 | 실행 중인 Java 서비스, 사용할 수 있는 `jcmd`, `timeout`, attach 권한 |
 | Java 라이브러리 | Python 3와 `/proc`·JAR 읽기 권한. 실행 JAR, 클래스패스, 열린 JAR, Spring Boot/WAR 중첩 JAR의 메타데이터 |
