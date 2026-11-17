@@ -25,7 +25,7 @@ public class Assets {
     private static final String ASSET_COLUMNS = """
             SELECT t.id, t.name, t.host, t.port, t.description, t.collection_mode,
                 p.asset_code, p.environment, p.owner, p.location, p.purpose, p.lifecycle, p.notes,
-                COALESCE(p.revision, 0) AS revision, p.updated_by, p.updated_at,
+                COALESCE(p.revision, 0) AS revision, p.updated_by, p.updated_at, p.els_contract, p.els_valid_until, p.els_confirmed_by, p.els_confirmed_at,
                 i.job_id, i.observed_at, i.summary_json, j.finding_count, j.collection_method, j.import_sha256,
                 a.id AS latest_job_id, a.status AS latest_status, a.created_at AS latest_attempt_at, a.message AS latest_message,
                 (SELECT COUNT(*) FROM asset_service s WHERE s.target_id=t.id AND s.archived=FALSE) AS service_count,
@@ -56,8 +56,14 @@ public class Assets {
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public Map<String, Object> details(String target) {
         var row = asset(store.one(ASSET_COLUMNS + " WHERE t.id=?", target));
-        return Map.of("asset", row, "services", services(row), "jobs", store.rows(
+        return Map.of("asset", row, "services", services(row), "network", network(row), "jobs", store.rows(
                 "SELECT id, target_id, target_name, requested_by, status, created_at, finished_at, message, finding_count, collection_method FROM scan_job WHERE target_id=? ORDER BY created_at DESC, id DESC LIMIT 20", target));
+    }
+
+    private com.wook.observer.model.NetworkObservation network(Map<String, Object> row) {
+        String job = Store.string(row, "job_id");
+        var report = job.isEmpty() ? null : json.readValue(Store.string(store.one("SELECT report_json FROM scan_job WHERE id=?", job), "report_json"), Observation.class);
+        return com.wook.observer.model.NetworkObservation.from(report);
     }
 
     /** Export saved asset data in one consistent read, without SSH access or reassessment. */
@@ -65,14 +71,14 @@ public class Assets {
     public void export(String target, OutputStream output) throws IOException {
         var rows = target == null ? store.rows(ASSET_COLUMNS + " ORDER BY t.name, t.id")
                 : List.of(store.one(ASSET_COLUMNS + " WHERE t.id=?", target));
-        workbook.write(rows.stream().map(this::asset).toList(), this::services, output);
+        workbook.write(rows.stream().map(this::asset).toList(), this::services, this::network, output);
     }
 
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public String markdown(String target) {
         var rows = target == null ? store.rows(ASSET_COLUMNS + " ORDER BY t.name, t.id")
                 : List.of(store.one(ASSET_COLUMNS + " WHERE t.id=?", target));
-        return com.wook.observer.report.AssetMarkdown.write(rows.stream().map(this::asset).toList(), this::services);
+        return com.wook.observer.report.AssetMarkdown.write(rows.stream().map(this::asset).toList(), this::services, this::network);
     }
 
     private List<Map<String, Object>> services(Map<String, Object> row) {
@@ -93,7 +99,7 @@ public class Assets {
         row.remove("summary_json");
         var inventory = summary.isEmpty() ? null : json.readValue(summary, ServiceDiscovery.Summary.class);
         row.put("inventory", inventory);
-        row.put("os_support", OsLifecycle.forSummary(inventory));
+        row.put("os_support", OsLifecycle.forAsset(inventory, row));
         return row;
     }
 
@@ -104,9 +110,10 @@ public class Assets {
             try {
                 String saved = Store.string(row, "summary_json");
                 var summary = json.readValue(saved, ServiceDiscovery.Summary.class);
-                if (summary.osIdentity() != null) continue;
+                if (summary.osIdentity() != null && !(summary.osIdentity().id().equals("rhel") && summary.osIdentity().version().equals("7"))) continue;
                 var report = json.readValue(Store.string(store.one("SELECT report_json FROM scan_job WHERE id=?", row.get("job_id")), "report_json"), Observation.class);
                 var identity = OsLifecycle.identify(report);
+                if (identity.equals(summary.osIdentity())) continue;
                 var enriched = new ServiceDiscovery.Summary(summary.host(), identity.displayName(), summary.socketStatus(), summary.socketMessage(),
                         summary.processCount(), summary.containerCount(), summary.issueCount(), identity);
                 changed += store.jdbc.update("UPDATE asset_inventory SET summary_json=? WHERE target_id=? AND job_id=? AND summary_json=?",
@@ -121,7 +128,7 @@ public class Assets {
     @Transactional
     public void saveProfile(String target, ProfileInput input, String actor) {
         lockTarget(target);
-        var existing = store.rows("SELECT revision FROM asset_profile WHERE target_id=?", target);
+        var existing = store.rows("SELECT revision, els_contract, els_valid_until, els_confirmed_by, els_confirmed_at FROM asset_profile WHERE target_id=?", target);
         int revision = existing.isEmpty() ? 0 : ((Number) existing.getFirst().get("revision")).intValue();
         checkRevision(input.revision(), revision);
         String code = field(input.assetCode(), 120), owner = field(input.owner(), 120), location = field(input.location(), 200);
@@ -134,6 +141,20 @@ public class Assets {
         } else {
             store.jdbc.update("UPDATE asset_profile SET asset_code=?, environment=?, owner=?, location=?, purpose=?, lifecycle=?, notes=?, revision=revision+1, updated_by=?, updated_at=? WHERE target_id=?",
                     code, input.environment(), owner, location, purpose, input.lifecycle(), notes, actor, Instant.now().toString(), target);
+        }
+        // Omitted fields from older clients preserve the recorded contract; only an explicit checkbox value changes it.
+        if (input.elsContract() != null) {
+            String until = input.elsContract() ? field(input.elsValidUntil(), 10) : "";
+            if (input.elsContract()) {
+                try {
+                    var end = java.time.LocalDate.parse(until);
+                    if (!end.toString().equals(until) || end.isBefore(java.time.LocalDate.of(2024, 7, 1)) || end.isAfter(java.time.LocalDate.of(2029, 5, 31))) throw new IllegalArgumentException();
+                } catch (RuntimeException invalid) { throw new ApiProblem(400, "ELS 계약 종료일을 입력하세요 (2024-07-01 ~ 2029-05-31)."); }
+            }
+            boolean changed = existing.isEmpty() ? input.elsContract() : !input.elsContract().equals(existing.getFirst().get("els_contract"))
+                    || !until.equals(Store.string(existing.getFirst(), "els_valid_until"));
+            if (changed) store.jdbc.update("UPDATE asset_profile SET els_contract=?, els_valid_until=?, els_confirmed_by=?, els_confirmed_at=? WHERE target_id=?",
+                    input.elsContract(), until, input.elsContract() ? actor : "", input.elsContract() ? Instant.now().toString() : "", target);
         }
         OperationLog.afterCommit("asset.profile.saved", "targetId", target, "actor", actor, "revision", revision + 1);
     }
@@ -217,7 +238,11 @@ public class Assets {
         if (value == null || !choices.contains(value)) throw new ApiProblem(400, "지원하는 환경·운영 상태를 선택하세요.");
     }
     public record ProfileInput(String assetCode, String environment, String owner, String location, String purpose,
-                               String lifecycle, String notes, Integer revision) { }
+                               String lifecycle, String notes, Integer revision, Boolean elsContract, String elsValidUntil) {
+        public ProfileInput(String assetCode, String environment, String owner, String location, String purpose, String lifecycle, String notes, Integer revision) {
+            this(assetCode, environment, owner, location, purpose, lifecycle, notes, revision, null, null);
+        }
+    }
     public record ServiceInput(String name, String bindings, String owner, String software, String softwareVersion,
                                String runUser, String serviceType, String installPath, String dataPath, String logPath, String startCommand,
                                String stopCommand, String statusCommand, String dependencies, String notes,

@@ -23,6 +23,22 @@ class OfflineImportTest {
     @Autowired Store store;
 
     @Test
+    void existingAssetPreviewAndReimportRespectTheSavedElsContract() {
+        String os = java.util.Base64.getEncoder().encodeToString("ID=rhel\nVERSION_ID=7.9\nPRETTY_NAME=\"Red Hat Enterprise Linux Server 7.9 (Maipo)\"".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        String payload = OfflineInventoryTest.payload("els-host").replace("DONE\n", "OSINFO\tos_release\tCOLLECTED\t" + os + "\nDONE\n");
+        byte[] first = OfflineInventoryTest.file(payload, Instant.parse("2026-01-01T00:00:00Z"));
+        String target = imports.importFile(first, "", "ELS 자산", "els-host", false, "admin").get("targetId").toString();
+        assets.saveProfile(target, new Assets.ProfileInput("ELS", "PRODUCTION", "운영팀", "IDC", "업무", "ACTIVE", "", 0, true, "2029-05-31"), "admin");
+        byte[] next = OfflineInventoryTest.file(payload.replace("12345", "54321"), Instant.parse("2026-02-01T00:00:00Z"));
+        assertThat(((OsLifecycle.Support) imports.preview(next, target).get("osSupport")).status()).isEqualTo("ELS_RECORDED");
+        assertThat(((OsLifecycle.Support) imports.preview(next, "").get("osSupport")).upgradeRequired()).isTrue();
+        imports.importFile(next, target, "", "", false, "admin");
+        var asset = (Map<String, Object>) assets.details(target).get("asset");
+        assertThat(asset).containsEntry("els_contract", true).containsEntry("els_valid_until", "2029-05-31");
+        assertThat(((OsLifecycle.Support) asset.get("os_support")).status()).isEqualTo("ELS_RECORDED");
+    }
+
+    @Test
     void createsCredentialFreeAssetsAndDeduplicatesImportsAtomically() {
         byte[] file = OfflineInventoryTest.file("new-host");
         var preview = imports.preview(file, "");

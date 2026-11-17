@@ -29,6 +29,10 @@ public class AssetWorkbook {
 
     public void write(List<Map<String, Object>> assets, Function<Map<String, Object>, List<Map<String, Object>>> services,
                       OutputStream output) throws IOException {
+        write(assets, services, asset -> com.wook.observer.model.NetworkObservation.from(null), output);
+    }
+    public void write(List<Map<String, Object>> assets, Function<Map<String, Object>, List<Map<String, Object>>> services,
+                      Function<Map<String, Object>, com.wook.observer.model.NetworkObservation> network, OutputStream output) throws IOException {
         try (var book = new SXSSFWorkbook(100)) {
             book.setCompressTempFiles(true);
             var normal = book.getXSSFWorkbook().getStylesSource().getCTStylesheet().addNewCellStyles();
@@ -45,17 +49,27 @@ public class AssetWorkbook {
             Table inventory = new Table(book, header, body, "자산 목록", 3,
                     "서버명", "접속 주소", "자산번호", "환경", "담당자", "서버 위치", "용도", "운영 상태", "수집 호스트", "OS", "아키텍처", "CPU", "메모리(GiB)",
                     "최근 수집 시각(UTC)", "최근 점검 상태", "최근 점검 메시지", "관리 서비스 수", "절차 보완 수", "발견·의심 수", "자산 메모", "수정자", "수정 시각(UTC)", "자산 ID",
-                    "OS 지원 상태", "OS 전환 조치", "공식 종료일", "조건부 ELS 종료일", "지원 범위 / 계약 확인", "공식 정책 출처", "정책 확인일", "지원 판정 기준일");
+                    "OS 지원 상태", "OS 전환 조치", "공식 종료일", "조건부 ELS 종료일", "지원 범위 / 계약 확인", "공식 정책 출처", "정책 확인일", "지원 판정 기준일", "ELS 계약 등록", "등록 계약 종료일", "ELS 확인자", "ELS 확인 시각(UTC)");
             Table runbook = new Table(book, header, body, "서비스 운영대장", 3,
                     "서버명", "접속 주소", "자산번호", "서비스명", "구분", "SW", "버전", "담당파트", "실행계정", "APP / 설치위치", "DATA", "LOG",
-                    "자동 관측 포트", "운영 포트 / 보완", "시작 방법", "종료 방법", "상태 확인 방법", "연계 대상 / 방향", "메모", "관측 상태", "보관 여부",
+                    "자동 관측 포트", "운영 포트 / 보완", "시작 방법", "종료 방법", "상태 확인 방법", "연계 대상 / 방향", "메모", "관측 상태", "기본 목록 표시",
                     "최근 관측 시각(UTC)", "PID", "관측 실행 파일", "관측 이미지", "관측 컨테이너 ID", "수정자", "수정 시각(UTC)", "서비스 ID", "자산 ID");
             Table evidence = new Table(book, header, body, "포트·PID 상세", 3,
-                    "서버명", "접속 주소", "서비스명", "종류", "순번", "원문 값", "관측 상태", "관측 시각(UTC)", "보관 여부", "서비스 ID", "자산 ID", "조각 번호");
+                    "서버명", "접속 주소", "서비스명", "종류", "순번", "원문 값", "관측 상태", "관측 시각(UTC)", "기본 목록 표시", "서비스 ID", "자산 ID", "조각 번호");
+            Table connections = new Table(book, header, body, "네트워크 관측", 2, "서버명", "자산 ID", "수집 시각(UTC)", "프로토콜", "상태", "로컬 주소:포트", "상대 주소:포트", "PID / 프로세스", "분류 근거", "도구");
+            Table networkSettings = new Table(book, header, body, "네트워크 수집 범위", 2, "서버명", "자산 ID", "수집 시각(UTC)", "항목", "수집 상태", "근거 / 값");
             long count = 0, archived = 0;
             for (var asset : assets) {
+                var net = network.apply(asset);
+                networkSettings.add(text(asset, "name"), text(asset, "id"), net.collectedAt(), "TCP LISTEN / UDP", net.bindings().status().label(), net.bindings().message());
+                networkSettings.add(text(asset, "name"), text(asset, "id"), net.collectedAt(), "TCP 연결", net.connections().status().label(), net.connections().message());
+                for (var setting : net.settings()) networkSettings.add(text(asset, "name"), text(asset, "id"), net.collectedAt(), setting.source(), setting.status().label(), setting.value().isEmpty() ? (setting.status() == com.wook.observer.model.SystemInventory.Status.COLLECTED ? "설정 없음" : "미확인") : setting.value());
+                for (var entry : net.entries()) {
+                    var values = new java.util.ArrayList<Object>(List.of(text(asset, "name"), text(asset, "id"), net.collectedAt()));
+                    values.addAll(NetworkReports.values(entry)); connections.add(values.toArray());
+                }
                 var observed = (ServiceDiscovery.Summary) asset.get("inventory");
-                var support = OsLifecycle.forSummary(observed);
+                var support = OsLifecycle.forAsset(observed, asset);
                 inventory.add(text(asset, "name"), text(asset, "host"), text(asset, "asset_code"), label(asset, "environment", "미지정"), text(asset, "owner"),
                         text(asset, "location"), text(asset, "purpose"), label(asset, "lifecycle", "운영"), observed == null ? "미수집" : observed.host().name(),
                         observed == null ? "미수집" : observed.distribution(), observed == null ? "" : observed.host().architecture(),
@@ -64,7 +78,8 @@ public class AssetWorkbook {
                         text(asset, "observed_at"), label(asset, "latest_status", "점검 전"), text(asset, "latest_message"), asset.get("service_count"), asset.get("undocumented_count"),
                         asset.get("finding_count"), text(asset, "notes"), text(asset, "updated_by"), text(asset, "updated_at"), text(asset, "id"),
                         support.label(), support.action(), support.endedOn(), support.extendedUntil(), support.note(), support.sourceUrl(),
-                        support.policyVerifiedOn(), support.evaluatedOn());
+                        support.policyVerifiedOn(), support.evaluatedOn(), Boolean.TRUE.equals(asset.get("els_contract")) ? "운영자 확인" : "미등록",
+                        text(asset, "els_valid_until"), text(asset, "els_confirmed_by"), text(asset, "els_confirmed_at"));
                 for (var service : services.apply(asset)) {
                     count++;
                     boolean isArchived = Boolean.TRUE.equals(service.get("archived"));
@@ -77,7 +92,7 @@ public class AssetWorkbook {
                     runbook.add(text(asset, "name"), text(asset, "host"), text(asset, "asset_code"), name, label(service, "service_type", "미분류"),
                             text(service, "software"), text(service, "software_version"), text(service, "owner"), user, text(service, "install_path"), text(service, "data_path"), text(service, "log_path"),
                             candidate == null ? "미확인" : preview(candidate.bindings()), text(service, "bindings"), text(service, "start_command"), text(service, "stop_command"), text(service, "status_command"),
-                            text(service, "dependencies"), text(service, "notes"), label(service, "observation_status", ""), isArchived ? "보관" : "관리 중", text(service, "last_seen_at"),
+                            text(service, "dependencies"), text(service, "notes"), label(service, "observation_status", ""), isArchived ? "숨김" : "표시", text(service, "last_seen_at"),
                             candidate == null ? "" : preview(candidate.pids()), candidate == null ? "" : candidate.executable(), candidate == null ? "" : candidate.image(),
                             candidate == null ? "" : candidate.containerId(), text(service, "updated_by"), text(service, "updated_at"), text(service, "id"), text(asset, "id"));
                     if (candidate != null) {
@@ -89,13 +104,14 @@ public class AssetWorkbook {
                 }
             }
             guide.add("생성 시각(UTC)", Instant.now().toString());
-            guide.add("자산 수", assets.size()); guide.add("서비스 수(보관 포함)", count); guide.add("보관 서비스 수", archived);
-            guide.add("범위", "전체 자산 또는 선택한 자산의 저장된 전체 서비스(보관 포함). 화면 검색·필터와 저장 전 입력은 반영하지 않습니다.");
+            guide.add("자산 수", assets.size()); guide.add("서비스 수(숨긴 서비스 포함)", count); guide.add("숨긴 서비스 수", archived);
+            guide.add("범위", "전체 자산 또는 선택한 자산의 저장된 전체 서비스(숨긴 서비스 포함). 화면 검색·필터와 저장 전 입력은 반영하지 않습니다.");
             guide.add("관측과 수기", "자동 관측 포트·PID는 최근 저장 근거이며 실시간 상태가 아닙니다. 운영 포트·경로·시작/종료/상태 확인 방법은 운영자가 작성한 정보입니다. 명령은 실행하지 않습니다.");
             guide.add("전체 값", "화면에서 축약한 주소·Docker 매핑·PID는 포트·PID 상세 시트에 항목별로 보존합니다. 긴 원문 값은 순번·조각 번호 순으로 구분자 없이 이어 붙이면 복원됩니다. 빈 자동 관측 포트는 미확인입니다.");
             guide.add("과거 보고서", "다운로드 시점의 저장된 운영대장입니다. 과거 점검 보고서·판정을 변경하거나 서버에 다시 접속하지 않습니다. 시각은 UTC입니다.");
-            guide.add("OS 지원 상태", "저장된 OS 근거와 문서 생성 시점의 내장 정책 기준입니다. RHEL 7 ELS 계약·적용 여부와 제3자 지원은 미확인입니다. 정책 미확인은 지원 중이라는 뜻이 아니며 CVE 발견 건수와 별도로 관리합니다.");
-            for (var table : List.of(guide, inventory, runbook, evidence)) table.finish();
+            guide.add("OS 지원 상태", "저장된 OS 근거와 문서 생성 시점의 내장 정책 기준입니다. RHEL 7 ELS는 운영자가 등록한 계약과 종료일을 반영하며, 자동 계약 조회를 하지 않습니다. 제3자 지원은 미확인입니다. 정책 미확인은 지원 중이라는 뜻이 아니며 CVE 발견 건수와 별도로 관리합니다.");
+            guide.add("네트워크 관측", NetworkReports.NOTE);
+            for (var table : List.of(guide, inventory, runbook, evidence, connections, networkSettings)) table.finish();
             guide.sheet.setColumnWidth(1, 100 * 256);
             evidence.sheet.setColumnWidth(5, 70 * 256);
             for (int column : new int[]{9, 10, 11, 12, 13, 14, 15, 16, 17, 18}) runbook.sheet.setColumnWidth(column, 32 * 256);
@@ -108,7 +124,7 @@ public class AssetWorkbook {
             var parts = ExcelReports.chunks(String.valueOf(values.get(index)));
             for (int part = 0; part < parts.size(); part++) {
                 table.add(text(asset, "name"), text(asset, "host"), name, kind, index + 1, parts.get(part), label(service, "observation_status", ""),
-                        text(service, "last_seen_at"), Boolean.TRUE.equals(service.get("archived")) ? "보관" : "관리 중", text(service, "id"), text(asset, "id"), part + 1);
+                        text(service, "last_seen_at"), Boolean.TRUE.equals(service.get("archived")) ? "숨김" : "표시", text(service, "id"), text(asset, "id"), part + 1);
             }
         }
     }

@@ -21,14 +21,18 @@ public final class AssetMarkdown {
             Map.entry("COMPLETED", "완료"), Map.entry("FAILED", "실패"), Map.entry("RUNNING", "진행 중"), Map.entry("QUEUED", "대기"));
 
     public static String write(List<Map<String, Object>> assets, Function<Map<String, Object>, List<Map<String, Object>>> services) {
+        return write(assets, services, asset -> com.wook.observer.model.NetworkObservation.from(null));
+    }
+    public static String write(List<Map<String, Object>> assets, Function<Map<String, Object>, List<Map<String, Object>>> services,
+                               Function<Map<String, Object>, com.wook.observer.model.NetworkObservation> network) {
         var out = new StringBuilder("# 자산·서비스 운영 보고서\n\n");
         out.append("작성 시각 (UTC): ").append(Instant.now()).append("\n\n")
-                .append("등록 자산 ").append(assets.size()).append("대. 저장된 자산 정보와 전체 서비스(시스템 서비스·보관 포함)를 제공합니다. 화면 검색·제외 필터는 적용하지 않습니다.\n\n")
+                .append("등록 자산 ").append(assets.size()).append("대. 저장된 자산 정보와 전체 서비스(시스템 서비스·숨긴 서비스 포함)를 제공합니다. 화면 검색·제외 필터는 적용하지 않습니다.\n\n")
                 .append("수기 운영 절차는 기록이며 실행되지 않습니다. 자동 관측은 서버별 수집 시각 기준이며 미관측은 중지·삭제를 의미하지 않습니다.\n\n")
-                .append("OS 지원 상태는 저장된 OS 근거와 문서 생성 시점의 내장 정책 기준입니다. 개별 연장 지원 계약은 미확인이며 CVE 발견 건수와 별도로 관리합니다.\n\n")
+                .append("OS 지원 상태는 저장된 OS 근거와 문서 생성 시점의 내장 정책 기준입니다. ELS는 운영자가 등록한 계약과 종료일을 반영하며, 자동 계약 조회를 하지 않습니다. CVE 발견 건수와 별도로 관리합니다.\n\n")
                 .append("## 자산 목록\n\n| 서버명 | 주소 | 자산번호 | 서버 위치 | 담당 | 최근 수집 (UTC) | OS 지원 상태 |\n| --- | --- | --- | --- | --- | --- | --- |\n");
         for (var asset : assets) {
-            var support = OsLifecycle.forSummary((ServiceDiscovery.Summary) asset.get("inventory"));
+            var support = OsLifecycle.forAsset((ServiceDiscovery.Summary) asset.get("inventory"), asset);
             row(out, value(asset, "name"), value(asset, "host"), value(asset, "asset_code"), value(asset, "location"), value(asset, "owner"),
                     value(asset, "observed_at"), support.upgradeRequired() ? "OS 업그레이드 필요 · " + support.label() : support.label());
         }
@@ -49,11 +53,13 @@ public final class AssetMarkdown {
             row(out, "최근 시도 상태", label(asset, "latest_status", "점검 전")); field(out, "최근 시도 메시지", asset, "latest_message");
             row(out, "관측 호스트", summary == null ? "미수집" : summary.host().name());
             row(out, "OS", summary == null ? "미수집" : summary.distribution());
-            var support = OsLifecycle.forSummary(summary);
+            var support = OsLifecycle.forAsset(summary, asset);
             row(out, "OS 지원 상태", support.label());
+            row(out, "ELS 계약 등록", Boolean.TRUE.equals(asset.get("els_contract")) ? "운영자 확인" : "미등록");
+            field(out, "등록 계약 종료일", asset, "els_valid_until"); field(out, "ELS 확인자", asset, "els_confirmed_by"); field(out, "ELS 확인 시각", asset, "els_confirmed_at");
             row(out, "OS 전환 조치", support.action()); row(out, "OS 지원 범위", support.note());
             if (!support.endedOn().isEmpty()) row(out, "공식 종료일", support.endedOn());
-            if (!support.extendedUntil().isEmpty()) row(out, "조건부 ELS 종료일 · 계약 미확인", support.extendedUntil());
+            if (!support.extendedUntil().isEmpty()) row(out, "공식 ELS 제공 종료일 · 조건부", support.extendedUntil());
             if (!support.sourceUrl().isEmpty()) row(out, "공식 지원 정책 출처", support.sourceUrl());
             row(out, "지원 정책 확인 / 판정 기준", support.policyVerifiedOn() + " / " + support.evaluatedOn());
             row(out, "CPU / 메모리", summary == null ? "미수집" : summary.host().processors() + " CPU / " + summary.host().physicalMemoryBytes() + " bytes");
@@ -63,6 +69,7 @@ public final class AssetMarkdown {
             row(out, "수집 제한 건수", summary == null ? "미수집" : summary.issueCount());
             row(out, "최근 완료 점검의 발견·의심", asset.get("finding_count") == null ? "미점검" : asset.get("finding_count"));
             field(out, "관측 점검 ID", asset, "job_id"); field(out, "업로드 파일 SHA-256", asset, "import_sha256");
+            out.append(NetworkReports.markdown(network.apply(asset)));
             var rows = services.apply(asset);
             out.append("\n### 서비스 운영대장 · ").append(rows.size()).append("개\n\n");
             if (rows.isEmpty()) out.append("등록하거나 수집한 서비스가 없습니다.\n");
@@ -73,7 +80,7 @@ public final class AssetMarkdown {
                 if (name.isEmpty() && observed != null) name = observed.name();
                 out.append("\n#### ").append(++serviceIndex).append(". ").append(cell(name)).append("\n\n"); fields(out);
                 row(out, "구분", label(service, "service_type", "미분류"));
-                row(out, "관리 상태", Boolean.TRUE.equals(service.get("archived")) ? "보관" : "관리 중");
+                row(out, "관리 상태", Boolean.TRUE.equals(service.get("archived")) ? "숨김" : "표시");
                 row(out, "관측 상태", label(service, "observation_status", "미확인"));
                 field(out, "SW", service, "software"); field(out, "SW 버전", service, "software_version");
                 field(out, "담당파트 / 담당자", service, "owner"); field(out, "실행계정 (수기)", service, "run_user");

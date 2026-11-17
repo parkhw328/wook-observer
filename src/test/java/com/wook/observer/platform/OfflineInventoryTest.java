@@ -29,6 +29,18 @@ class OfflineInventoryTest {
     static byte[] file(String host) { return file(payload(host), Instant.parse("2026-01-01T00:00:00Z")); }
 
     @Test
+    void importsNewConnectionAndPortPolicyRecordsButPreservesLegacyCoverage() {
+        String raw = payload("network").replace("DONE\n", "CONNECTION\ttcp\tESTAB 0 0 127.0.0.1:8443 192.0.2.1:40001\nCONNECTION_STATUS\tCOLLECTED\n"
+                + "NET_SETTING\tip_local_port_range\tCOLLECTED\t40000 45000\nNET_SETTING\tip_local_reserved_ports\tCOLLECTED\t8443\nDONE\n");
+        var report = inventory.parse(file(raw, Instant.now())).report();
+        assertThat(report.systemInventory().connections().entries()).singleElement().satisfies(s -> {
+            assertThat(s.peerAddress()).isEqualTo("192.0.2.1"); assertThat(s.peerPort()).isEqualTo(40001); assertThat(s.state()).isEqualTo("ESTABLISHED");
+        });
+        assertThat(report.systemInventory().networkSettings()).hasSize(2);
+        assertThat(inventory.parse(file("legacy")).report().systemInventory().connections().status()).isEqualTo(com.wook.observer.model.SystemInventory.Status.NOT_COLLECTED);
+    }
+
+    @Test
     void preservesCollectionTimeScopeAndPartialEvidenceWithoutTrustingSuppliedAssessment() {
         var result = inventory.parse(file("offline-fixture"));
         assertThat(result.report().collectedAt()).isEqualTo(Instant.parse("2026-01-01T00:00:00Z"));

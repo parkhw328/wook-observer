@@ -30,10 +30,14 @@ public class OfflineImports {
         var result = new LinkedHashMap<String, Object>();
         result.put("host", report.host()); result.put("collectedAt", report.collectedAt()); result.put("sha256", parsed.sha256());
         var os = OsLifecycle.identify(report);
-        result.put("distribution", os.displayName()); result.put("osSupport", OsLifecycle.evaluate(os));
+        result.put("distribution", os.displayName());
+        var profile = target.isEmpty() ? java.util.List.<Map<String, Object>>of()
+                : store.rows("SELECT els_contract, els_valid_until FROM asset_profile WHERE target_id=?", target);
+        result.put("osSupport", OsLifecycle.withContract(os, profile.isEmpty() ? Map.of() : profile.getFirst()));
         result.put("processes", report.processes().size()); result.put("containers", report.containers().size());
         result.put("jvms", report.javaProcesses().size()); result.put("rpmPackages", report.systemInventory().rpm().packages().size());
-        result.put("sockets", report.systemInventory().sockets().entries().size()); result.put("issues", report.issues());
+        result.put("sockets", report.systemInventory().sockets().entries().size());
+        result.put("network", com.wook.observer.model.NetworkObservation.from(report)); result.put("issues", report.issues());
         String expected = expectedHost(target);
         result.put("expectedHost", expected);
         result.put("identityMismatch", !expected.isEmpty() && !expected.equalsIgnoreCase(report.host().name()));

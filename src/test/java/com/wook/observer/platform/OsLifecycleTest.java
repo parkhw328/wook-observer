@@ -15,6 +15,35 @@ import static org.assertj.core.api.Assertions.*;
 
 class OsLifecycleTest {
     private final LocalDate today = LocalDate.of(2026, 11, 17);
+    @Test
+    void recordedElsAppliesOnlyToRhel79ThroughTheContractEndDate() {
+        var identity = OsLifecycle.identify(report("ID=rhel\nVERSION_ID=7.9", ""));
+        var contract = Map.<String, Object>of("els_contract", true, "els_valid_until", today.toString());
+        var valid = OsLifecycle.withContract(identity, contract, today);
+        assertThat(valid.status()).isEqualTo("ELS_RECORDED");
+        assertThat(valid.upgradeRequired()).isFalse();
+        assertThat(valid.note()).contains("운영자", today.toString(), "자동 계약 조회 결과가 아니며");
+        var expired = OsLifecycle.withContract(identity, contract, today.plusDays(1));
+        assertThat(expired.status()).isEqualTo("ELS_EXPIRED");
+        assertThat(expired.upgradeRequired()).isTrue();
+        assertThat(OsLifecycle.withContract(identity, Map.of("els_contract", false, "els_valid_until", "2029-05-31"), today).upgradeRequired()).isTrue();
+        for (String version : List.of("7", "7.8")) {
+            var support = OsLifecycle.withContract(OsLifecycle.identify(report("ID=rhel\nVERSION_ID=" + version, "")), contract, today);
+            assertThat(support.status()).isEqualTo("ELS_VERSION_CHECK");
+            assertThat(support.upgradeRequired()).isTrue();
+        }
+        assertThat(OsLifecycle.withContract(OsLifecycle.identify(report("ID=centos\nVERSION_ID=7.9", "")), contract, today).status()).isEqualTo("END_OF_LIFE");
+        for (String date : List.of("", "bad", "2024-06-30", "2029-06-01"))
+            assertThat(OsLifecycle.withContract(identity, Map.of("els_contract", true, "els_valid_until", date), today).status()).isEqualTo("MAINTENANCE_ENDED");
+        assertThat(OsLifecycle.withContract(null, contract, today).status()).isEqualTo("UNKNOWN");
+    }
+
+    @Test
+    void refinesCoarseRhelVersionOnlyWithMatchingReleaseEvidence() {
+        assertThat(OsLifecycle.identify(report("ID=rhel\nVERSION_ID=7", "Red Hat Enterprise Linux Server release 7.9 (Maipo)")).version()).isEqualTo("7.9");
+        assertThat(OsLifecycle.identify(report("ID=rhel\nVERSION_ID=7", "CentOS Linux release 7.9.2009 (Core)")).version()).isEqualTo("7");
+        assertThat(OsLifecycle.identify(report("ID=rhel\nVERSION_ID=7.8", "Red Hat Enterprise Linux Server release 7.9 (Maipo)")).version()).isEqualTo("7.8");
+    }
     static Observation report(String osRelease, String redhatRelease) {
         return new Observation("1.10.1", Instant.parse("2026-01-01T00:00:00Z"),
                 new Observation.Host("legacy", "Linux", "5.14.0.el9", "x86_64", 2, 1L << 30, "fixture", ""),

@@ -351,7 +351,7 @@ function userForm(button) {
     `<h2>${edit ? "계정 편집" : "사용자 추가"}</h2><form id="user-form" data-edit="${edit}"><label>아이디<input name="username" required minlength="3" maxlength="64" pattern="[A-Za-z0-9][A-Za-z0-9._-]{2,63}" value="${esc(button.dataset.user)}" ${edit ? "readonly" : ""} autocomplete="off"></label><label>${edit ? "새 비밀번호 (빈칸이면 유지)" : "초기 비밀번호"}<input name="password" type="password" ${edit ? "" : "required"} minlength="8" autocomplete="new-password"><small>8자 이상, UTF-8 72바이트 이하</small></label><label>권한<select name="role"><option value="USER" ${button.dataset.role === "USER" ? "selected" : ""}>사용자 · 점검 / 조회</option><option value="ADMIN" ${button.dataset.role === "ADMIN" ? "selected" : ""}>관리자 · 전체 관리</option></select></label><label class="check"><input name="enabled" type="checkbox" ${!edit || button.dataset.enabled === "true" ? "checked" : ""}>계정 활성화</label><button class="primary" type="submit">저장</button></form>`;
   $("#modal").showModal();
 }
-function systemDetails(report) {
+function systemDetails(report, network) {
   const inventory = report.systemInventory;
   const statuses = { COLLECTED: "수집 완료", UNAVAILABLE: "파일·도구 없음", FAILED: "조회 실패",
     TIMEOUT: "시간 제한", TRUNCATED: "일부 수집·제한", NOT_COLLECTED: "미수집" };
@@ -370,11 +370,7 @@ function systemDetails(report) {
     (inventory?.os?.length ? table(["근거", "수집 상태", "값"], inventory.os.map(d =>
       `<tr><td>${esc(d.source)}</td><td class="system-status">${esc(statuses[d.status] || "미수집")}</td><td class="system-value">${esc(d.value || "—")}</td></tr>`))
       : empty("OS 상세 미수집", "이전 버전의 결과는 다시 점검하면 OS·RPM 정보를 확인할 수 있습니다.")) +
-    '<h3>열린 포트 · TCP 리스닝 / UDP 바인딩</h3>' +
-    `<p>${esc(statuses[socketInventory?.status] || "미수집")} · 소켓 ${number(sockets.length)}개</p><p class="small">${esc(socketInventory?.message || "이전 결과는 새 점검부터 포트를 수집합니다.")} 현재 네트워크 네임스페이스의 주소이며 방화벽·외부 접속 가능성은 별도 확인합니다.</p>` +
-    (sockets.length ? table(["프로토콜", "바인딩 주소", "포트", "상태", "PID · 프로세스"], sockets.slice(0, 200).map(s =>
-      `<tr><td>${esc(s.protocol)}</td><td>${esc(s.localAddress)}</td><td>${esc(s.localPort)}</td><td>${esc(s.state)}</td><td>${s.processes?.length ? s.processes.map(p => `PID ${esc(p.pid)} / ${esc(p.name)}`).join("<br>") : "미확인(권한/프로세스 종료 등)"}</td></tr>`)) : "") +
-    (sockets.length > 200 ? '<p class="small">첫 200개 소켓입니다. 전체 목록은 XLSX·JSON·ZIP에서 확인하세요.</p>' : "") +
+    networkPanel(network, "inspection") +
     '<h3>설치 RPM 패키지</h3>' +
     `<p>${esc(statuses[rpm?.status] || "미수집")} · 수집 항목 ${number(packages.length)}건</p><p class="small">${esc(rpm?.message || "이 스냅샷에서는 RPM을 수집하지 않았습니다.")} RHEL·Rocky·AlmaLinux 8/9/10의 공식 권고와 저장된 판정입니다. 컨테이너별 RPM DB는 미지원입니다.</p><details><summary>저장소·제품 스트림 근거</summary><p>${esc(statuses[rpm?.repositoryStatus] || "미수집")} · 릴리스 고정 ${esc(rpm?.releaseVersion || "없음/미확인")}</p><p>${esc((rpm?.enabledRepositories || []).join(", "))}</p></details>` +
     (packages.length ? table(["이름", "설치 EVR", "아키텍처", "취약점발견", "패키지 근거"], packages.slice(0, 100).map(p =>
@@ -382,7 +378,7 @@ function systemDetails(report) {
     (packages.length > 100 ? '<p class="small">첫 100건을 표시합니다. 전체 수집 목록은 XLSX·JSON·ZIP에서 확인하세요.</p>' : "");
 }
 async function detail(id) {
-  const { report, operator } = await api("/jobs/" + encodeURIComponent(id) + "/overview");
+  const { report, operator, network } = await api("/jobs/" + encodeURIComponent(id) + "/overview");
   const actions = operator.actions;
   const list = (values) => values.map(v => esc(v)).join("<br>");
   const location = l => l.pid == null ? (l.path || l.asset) : `PID ${l.pid}${l.containerId ? " / " + l.containerId : ""} / ${l.path}`;
@@ -398,7 +394,7 @@ async function detail(id) {
     table(["패키지", "버전", "취약점발견", "관련 ID", "식별 · 영향 위치"], operator.libraries.slice(0, 200).map(l =>
       `<tr><td>${esc(l.name)}</td><td>${esc(l.version)}</td><td>${esc(l.status)}</td><td>${list(l.advisories)}</td><td><details><summary>위치 ${l.locations.length}곳</summary><p>${list(l.evidence)}</p>${list(l.locations.map(location))}</details></td></tr>`)) +
     '<p class="small">첫 200개를 표시합니다. 직군별 전체 명세와 원문은 XLSX·ZIP·JSON으로 내려받을 수 있습니다.</p></details>' +
-    '<details class="report-section"><summary>OS·커널 · 열린 포트 · 설치 RPM 명세</summary>' + systemDetails(report) + '</details>' +
+    '<details class="report-section"><summary>OS·커널 · 열린 포트 · 설치 RPM 명세</summary>' + systemDetails(report, network) + '</details>' +
     `<details class="report-section"><summary>수집 제한 · 오류 ${operator.issues.length}종류</summary>` +
     table(["계층", "대상", "내용"], operator.issues.map(i => `<tr><td>${esc(i.layer)}</td><td>${list(i.targets)}</td><td>${esc(i.message)}</td></tr>`)) + '</details>';
   $("#modal").showModal();

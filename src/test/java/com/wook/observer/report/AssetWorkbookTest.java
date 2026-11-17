@@ -44,7 +44,7 @@ class AssetWorkbookTest {
         var service = new HashMap<String, Object>(Map.of("id", "svc-1", "observed", observed, "observation_status", "NOT_OBSERVED", "archived", true,
                 "name", "=HYPERLINK(\"https://example.invalid\",\"literal\")", "start_command", "cd /APP/example\n./start.sh", "bindings", "운영 8443", "status_command", "@status", "notes", "한글 메모"));
         try (var book = write(List.of(asset), List.of(service))) {
-            assertThat(book.getNumberOfSheets()).isEqualTo(4);
+            assertThat(book.getNumberOfSheets()).isEqualTo(6);
             var inventory = book.getSheet("자산 목록");
             assertThat(inventory.getRow(1).getCell(2).getStringCellValue()).isEqualTo("000123");
             assertThat(inventory.getRow(1).getCell(8).getStringCellValue()).isEqualTo("미수집");
@@ -56,7 +56,7 @@ class AssetWorkbookTest {
             assertThat(grid.getRow(1).getCell(13).getStringCellValue()).isEqualTo("운영 8443");
             assertThat(grid.getRow(1).getCell(14).getStringCellValue()).isEqualTo("cd /APP/example\n./start.sh");
             assertThat(grid.getRow(1).getCell(19).getStringCellValue()).isEqualTo("최근 수집 미확인");
-            assertThat(grid.getRow(1).getCell(20).getStringCellValue()).isEqualTo("보관");
+            assertThat(grid.getRow(1).getCell(20).getStringCellValue()).isEqualTo("숨김");
             assertThat(grid.getRow(1).getCell(22).getStringCellValue()).isEqualTo("1001\n1002\n1003\n1004");
             assertThat(grid.getPaneInformation().getVerticalSplitPosition()).isEqualTo((short) 3);
             assertThat(grid.getCTWorksheet().getAutoFilter().getRef()).isEqualTo("A1:AD2");
@@ -85,7 +85,7 @@ class AssetWorkbookTest {
     @Test
     void emptyInventoryStillProducesUsableSheetsAndHeaders() throws Exception {
         try (var book = write(List.of(), List.of())) {
-            assertThat(book.getNumberOfSheets()).isEqualTo(4);
+            assertThat(book.getNumberOfSheets()).isEqualTo(6);
             assertThat(book.getSheet("자산 목록").getLastRowNum()).isZero();
             assertThat(book.getSheet("서비스 운영대장").getRow(0).getCell(14).getStringCellValue()).isEqualTo("시작 방법");
         }

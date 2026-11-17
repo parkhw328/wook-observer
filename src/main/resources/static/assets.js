@@ -13,18 +13,19 @@ const assetTime = value => value ? `<time datetime="${esc(value)}" title="${date
 function assetKpis(summary) {
   return `<div class="kpis">
     <article class="kpi"><p>등록 자산</p><strong>${number(summary.total)}</strong><small>점검 전 자산 ${number(summary.unscanned)}대</small></article>
-    <article class="kpi"><p>서비스 후보·등록</p><strong>${number(summary.services)}</strong><small>보관 처리한 항목 제외</small></article>
+    <article class="kpi"><p>서비스 후보·등록</p><strong>${number(summary.services)}</strong><small>기본 목록에서 숨긴 서비스 제외</small></article>
     <article class="kpi ${summary.undocumented ? "alert" : ""}"><p>운영 절차 보완</p><strong>${number(summary.undocumented)}</strong><small>시작·종료·상태 확인 방법 미입력</small></article>
     <article class="kpi ${summary.findings ? "alert" : ""}"><p>자산별 최근 발견·의심</p><strong>${number(summary.findings)}</strong><small>자산마다 최근 완료 점검 1회 기준</small></article>
   </div>${summary.osUpgrade ? `<div class="os-upgrade-notice" role="status"><div><strong>OS 업그레이드 필요 ${number(summary.osUpgrade)}대</strong><span>지원 종료 또는 정규 유지보수가 종료된 자산을 확인하세요.</span></div><button type="button" data-action="show-os-upgrades">대상 자산 보기</button></div>` : ""}`;
 }
 
 function osSupportBadge(support) {
-  return support?.upgradeRequired ? `<div class="os-support-badge"><span class="badge bad" title="${esc(support.label + " · " + support.endedOn + " · " + support.note)}">OS 업그레이드 필요</span></div>` : "";
+  if (!support?.upgradeRequired && support?.status !== "ELS_RECORDED") return "";
+  return `<div class="os-support-badge"><span class="badge ${support.upgradeRequired ? "bad" : ""}" title="${esc(support.label + " · " + support.note)}">${support.upgradeRequired ? "OS 업그레이드 필요" : "ELS 계약 확인"}</span></div>`;
 }
 function osSupportBanner(support) {
-  if (!support?.upgradeRequired) return "";
-  return `<div class="note os-support-notice" role="status"><strong>OS 업그레이드 필요 · ${esc(support.label)}</strong><p>종료일 ${esc(support.endedOn)} · ${esc(support.note)}</p><div>${esc(support.action)}</div><div class="small"><a href="${esc(support.sourceUrl)}" target="_blank" rel="noopener noreferrer">공식 지원 정책</a> · 정책 확인 ${esc(support.policyVerifiedOn)} · 판정 기준 ${esc(support.evaluatedOn)} · CVE 발견 건수와 별도로 관리합니다.</div></div>`;
+  if (!support?.upgradeRequired && support?.status !== "ELS_RECORDED") return "";
+  return `<div class="note os-support-notice ${support.status === "ELS_RECORDED" ? "els-recorded" : ""}" role="status"><strong>${support.upgradeRequired ? "OS 업그레이드 필요 · " : ""}${esc(support.label)}</strong><p>공식 종료일 ${esc(support.endedOn)} · ${esc(support.note)}</p><div>${esc(support.action)}</div><div class="small"><a href="${esc(support.sourceUrl)}" target="_blank" rel="noopener noreferrer">공식 지원 정책</a> · 정책 확인 ${esc(support.policyVerifiedOn)} · 판정 기준 ${esc(support.evaluatedOn)} · CVE 발견 건수와 별도로 관리합니다.</div></div>`;
 }
 
 function assetTable(items) {
@@ -67,19 +68,20 @@ function assetProfile(a) {
     ${input("자산번호", "assetCode", a.asset_code, 120)}<label>환경<select name="environment" ${disabled}>${options(environments, a.environment || "UNSPECIFIED")}</select></label>
     ${input("담당자 / 담당파트", "owner", a.owner, 120)}${input("서버 위치", "location", a.location, 200)}
     <label>운영 상태<select name="lifecycle" ${disabled}>${options(lifecycles, a.lifecycle || "ACTIVE")}</select></label>${input("서버 용도", "purpose", a.purpose, 1000)}</div>
+    <div class="els-contract-fields"><label class="check"><input type="checkbox" name="elsContract" ${a.els_contract ? "checked" : ""} ${disabled}>RHEL 7 ELS 계약 확인</label><label>계약 종료일<input type="date" name="elsValidUntil" min="2024-07-01" max="2029-05-31" value="${esc(a.els_valid_until || "")}" ${a.els_contract ? "required" : "disabled"} ${disabled}></label><p class="small">운영자가 확인한 계약을 저장합니다. RHEL 7.9이며 등록한 계약 기간 안이면 반복 업그레이드 경고를 제외하고, 만료 후 다시 안내합니다. 실제 계약·지원 범위는 자동 조회하지 않습니다.${a.els_contract && a.els_confirmed_by ? `<br>확인자 ${esc(a.els_confirmed_by)} · ${date(a.els_confirmed_at)}` : ""}</p></div>
     <label>자산 메모<textarea name="notes" maxlength="4000" ${disabled}>${esc(a.notes)}</textarea></label>
     <div class="form-actions"><span class="small">${a.updated_at ? esc(a.updated_by) + " · " + date(a.updated_at) : "아직 수기 정보를 저장하지 않았습니다."}</span>${admin() ? '<button type="button" data-action="cancel-profile">입력 취소</button><button type="submit" class="primary">자산 정보 저장</button>' : ""}</div></form></details>`;
 }
 
 function assetDetailHtml(data) {
   const a = data.asset, i = a.inventory;
-  return pageHead(a.name, `${a.host} · ${a.asset_code || "자산번호 미입력"}`, `<a class="button" href="#assets">자산 목록</a><a class="button" href="#assets/report/${encodeURIComponent(a.id)}">자산 MD 보고서</a><button data-asset-export="${esc(a.id)}" title="이 자산의 저장된 전체 서비스(보관 포함)를 내려받습니다.">자산 XLSX</button><button data-action="refresh-asset">새로고침</button>${admin() ? `<a class="button" href="#offline/${encodeURIComponent(a.id)}">결과 업로드</a>` : ""}${a.collection_mode === "UPLOAD" ? `<a class="button" href="/api/collector/observer-collect.sh">수집 SH 다운로드</a>` : `<button class="primary" data-action="scan" data-id="${esc(a.id)}" ${["RUNNING", "QUEUED"].includes(a.latest_status) ? "disabled" : ""}>점검 시작</button>`}`, true)
+  return pageHead(a.name, `${a.host} · ${a.asset_code || "자산번호 미입력"}`, `<a class="button" href="#assets">자산 목록</a><a class="button" href="#assets/report/${encodeURIComponent(a.id)}">자산 MD 보고서</a><button data-asset-export="${esc(a.id)}" title="이 자산의 저장된 전체 서비스(숨긴 서비스 포함)를 내려받습니다.">자산 XLSX</button><button data-action="refresh-asset">새로고침</button>${admin() ? `<a class="button" href="#offline/${encodeURIComponent(a.id)}">결과 업로드</a>` : ""}${a.collection_mode === "UPLOAD" ? `<a class="button" href="/api/collector/observer-collect.sh">수집 SH 다운로드</a>` : `<button class="primary" data-action="scan" data-id="${esc(a.id)}" ${["RUNNING", "QUEUED"].includes(a.latest_status) ? "disabled" : ""}>점검 시작</button>`}`, true)
     + (a.latest_status === "FAILED" ? `<div class="note warn">최근 점검 실패 · ${esc(a.latest_message)} 기존 수집 정보는 ${date(a.observed_at)} 기준입니다.</div>` : "")
     + `<div class="asset-summary panel"><div><span class="small">수집된 호스트 / OS</span><b>${esc(i?.host.name || "미수집")}</b><span>${esc(i?.distribution || "점검 후 표시됩니다")}</span></div><div><span class="small">CPU / 메모리</span><b>${i ? (i.host.processors || "미수집") + " CPU · " + memory(i.host.physicalMemoryBytes) : "미수집"}</b><span>${esc(i?.host.architecture || "")}</span></div><div><span class="small">수집 기준 시각</span><b>${date(a.observed_at)}</b><span>${a.latest_status ? badge(a.latest_status) : "점검 전"} ${a.job_id ? `· 발견·의심 ${number(a.finding_count)}건` : ""}</span></div></div>`
-    + osSupportBanner(a.os_support) + assetProfile(a)
+    + osSupportBanner(a.os_support) + assetProfile(a) + networkPanel(data.network, "asset")
     + `<section class="panel"><div class="panel-title"><div><h2>서비스 운영대장</h2><p class="small">서비스·포트·실행계정·경로와 운영 절차를 한 행에서 관리합니다.</p></div>${admin() ? '<button class="primary" data-action="add-service">+ 수동 서비스</button>' : '<span class="badge">조회 권한</span>'}</div>
     <div class="note">자동 수집은 최근 점검의 관측값입니다. 시작·종료·상태 확인 방법은 기록용이며 실행되지 않습니다. 수기 정보는 재점검 후에도 유지됩니다.${i ? `<br>포트 수집: ${esc({COLLECTED:"수집 완료", NOT_COLLECTED:"미수집", FAILED:"조회 실패", UNAVAILABLE:"도구 없음", TIMEOUT:"시간 제한", TRUNCATED:"일부 수집"}[i.socketStatus] || i.socketStatus)} · ${esc(i.socketMessage)} · 수집 제한 ${number(i.issueCount)}건` : ""}</div>
-    <form id="service-search" class="asset-filters"><label>서비스 검색<input name="query" maxlength="200" value="${esc(serviceQuery)}" placeholder="서비스·SW·담당·포트·경로"></label><label>표시 항목<select name="filter">${options({active:"관리 중", undocumented:"절차 보완", unobserved:"최근 수집 미확인", archived:"보관함", all:"전체"}, serviceFilter)}</select></label><button type="submit">검색</button></form><div id="service-grid">${serviceGrid(data.services)}</div></section>`
+    <form id="service-search" class="asset-filters"><label>서비스 검색<input name="query" maxlength="200" value="${esc(serviceQuery)}" placeholder="서비스·SW·담당·포트·경로"></label><label>표시 항목<select name="filter">${options({active:"기본 목록", undocumented:"절차 보완", unobserved:"최근 수집 미확인", archived:"숨긴 서비스", all:"전체"}, serviceFilter)}</select></label><button type="submit">검색</button></form><div id="service-grid">${serviceGrid(data.services)}</div></section>`
     + `<section class="panel"><div class="panel-title"><h2>이 자산의 최근 점검</h2><span class="small">최근 20회 · 당시 보고서 보존</span></div>${jobsTable(data.jobs)}</section>`;
 }
 
@@ -188,12 +190,12 @@ function observedPids(s) {
   return `<button type="button" class="pid-preview" data-asset-detail="pids" data-service-id="${esc(s.id)}" aria-label="PID 전체 ${pids.length}개 보기" aria-expanded="false" aria-controls="asset-popover">${pidChips(preview)}${pids.length > preview.length ? ` <span class="pid-more">+${pids.length - preview.length}</span>` : ""}</button>`;
 }
 function observedStatus(s) {
-  const status = s.archived ? "보관" : {OBSERVED:"확인", NOT_OBSERVED:"미확인", MANUAL:"수동"}[s.observation_status] || "미확인";
+  const status = s.archived ? "숨김" : {OBSERVED:"확인", NOT_OBSERVED:"미확인", MANUAL:"수동"}[s.observation_status] || "미확인";
   return `<button type="button" class="observation-preview" data-asset-detail="observation" data-service-id="${esc(s.id)}" aria-label="관측 상태와 수정 이력 상세 보기" aria-expanded="false" aria-controls="asset-popover">${badge(status)}${s.last_seen_at ? `<span class="observation-time">${assetTime(s.last_seen_at)}</span>` : ""}</button>`;
 }
 function observationDetail(s) {
   const status = {OBSERVED:"최근 수집 확인", NOT_OBSERVED:"최근 수집 미확인", MANUAL:"수동 등록"}[s.observation_status] || "미확인";
-  return `<div class="cell-lines">${esc(status)}${s.archived ? " · 보관" : ""}</div>${s.observation_status === "NOT_OBSERVED" ? '<p class="small">이전 관측값입니다. 중지·삭제로 판정하지 않습니다.</p>' : ""}
+  return `<div class="cell-lines">${esc(status)}${s.archived ? " · 기본 목록에서 숨김" : ""}</div>${s.observation_status === "NOT_OBSERVED" ? '<p class="small">이전 관측값입니다. 중지·삭제로 판정하지 않습니다.</p>' : ""}
     <div class="port-detail"><b>최근 관측</b><div>${s.last_seen_at ? date(s.last_seen_at) : "관측 이력 없음"}</div></div>
     <div class="port-detail"><b>수기 정보 수정</b><div>${s.updated_at ? esc(s.updated_by) + " · " + date(s.updated_at) : "수정 이력 없음"}</div></div>`;
 }
@@ -236,7 +238,7 @@ function editService(id) {
     ${field("종료 방법", "stopCommand", s.stop_command, 4000, "종료 순서와 확인 방법", 5)}
     ${field("상태 확인 방법", "statusCommand", s.status_command, 4000, "상태 확인 명령 또는 점검 절차", 5)}</div></fieldset>
     <fieldset><legend>연계와 메모</legend><div class="editor-grid">${field("연계 대상 / 통신 방향", "dependencies", s.dependencies, 4000, "예: 내부 → 외부, 목적지:포트, 용도", 4)}${field("비고", "notes", s.notes, 4000, "운영 시 참고 사항", 4)}</div>
-    <label class="check"><input type="checkbox" name="archived" ${s.archived ? "checked" : ""}>보관 처리</label></fieldset></div>
+    <label class="check"><input type="checkbox" name="archived" ${s.archived ? "checked" : ""}>기본 목록에서 숨기기</label><p class="small">서비스를 삭제하지 않습니다. 저장 후 기본 목록과 서비스 집계에서 제외하며, ‘표시 항목 → 숨긴 서비스’에서 다시 열어 이 체크를 해제하면 복원됩니다. 수기 정보·수집 근거와 MD/XLSX에는 계속 포함됩니다.</p></fieldset></div>
     <div class="editor-actions"><p class="error" role="alert"></p><span class="small">빈 수기 값은 미입력으로 저장합니다.</span><button type="button" data-action="cancel-service">취소</button><button type="submit" class="primary">서비스 저장</button></div></form>`;
   $("#service-editor").showModal();
   $("#service-edit input").focus();
@@ -256,6 +258,8 @@ document.addEventListener("cancel", event => {
 function setAssetBusy(busy) {
   closeAssetPopover();
   document.querySelectorAll('#service-search input, #service-search select, #service-search button, [data-asset-export], [data-action="refresh-asset"], [data-action="add-service"], [data-action="edit-service"], [data-action="service-columns"], [data-action="toggle-system-services"], #asset-profile input, #asset-profile select, #asset-profile textarea, #asset-profile button, [data-action="scan"]').forEach(el => el.disabled = busy);
+  const contract = $('#asset-profile [name="elsContract"]'), end = $('#asset-profile [name="elsValidUntil"]');
+  if (contract && end) { contract.disabled = busy || !admin(); end.disabled = busy || !admin() || !contract.checked; }
 }
 
 document.addEventListener("click", async event => {
@@ -300,7 +304,7 @@ document.addEventListener("submit", async event => {
     } else if (form.id === "service-search") {
       serviceQuery = data.query; serviceFilter = data.filter; $("#service-grid").innerHTML = serviceGrid(assetDetail.services);
     } else if (form.id === "asset-profile") {
-      data.revision = Number(form.dataset.revision);
+      data.revision = Number(form.dataset.revision); data.elsContract = data.elsContract === "on"; data.elsValidUntil = data.elsContract ? data.elsValidUntil : "";
       await api("/admin/assets/" + encodeURIComponent(form.dataset.target), {method:"PUT", body:data});
       form.dataset.dirty = "false"; toast("자산 정보를 저장했습니다."); await render();
     } else {
@@ -408,7 +412,13 @@ document.addEventListener("click", async event => {
     link.href = url; link.download = `observer-assets-${new Date().toISOString().slice(0, 10)}.xlsx`;
     document.body.append(link); link.click(); link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 30_000);
-    toast("저장된 자산·서비스 전체 항목을 내려받았습니다. 보관 항목도 포함됩니다.");
+    toast("저장된 자산·서비스 전체 항목을 내려받았습니다. 숨긴 서비스도 포함됩니다.");
   } catch (error) { toast(error.message); }
   finally { button.disabled = false; button.textContent = label; }
+});
+
+document.addEventListener("change", event => {
+  if (!event.target.matches('#asset-profile [name="elsContract"]')) return;
+  const end = event.target.form.elements.elsValidUntil;
+  end.disabled = !event.target.checked; end.required = event.target.checked;
 });

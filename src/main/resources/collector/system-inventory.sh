@@ -106,30 +106,76 @@ fi
   printf 'RPM_REPO_STATUS\t%s\n' "$repo_status"
 ) | head -c 65536
 
-# Listening TCP and all bound UDP sockets in this network namespace. No port scans.
-if ! command -v ss >/dev/null 2>&1 || ! command -v timeout >/dev/null 2>&1; then
-  printf 'SOCKET_STATUS\tUNAVAILABLE\n'
+# Local namespace only: LISTEN/UDP and non-listening TCP have independent bounds.
+# netstat is a fallback for minimal/older hosts without ss. Never install tools.
+socket_tool=""
+if command -v ss >/dev/null 2>&1; then socket_tool=ss
+elif command -v netstat >/dev/null 2>&1; then socket_tool=netstat
+fi
+observer_socket_query() {
+  socket_record=$1; socket_protocol=$2; socket_mode=$3
+  (
+    if [ "$socket_tool" = ss ]; then
+      case "$socket_mode" in
+        listen) timeout -k 2 5 ss -lntp 2>/dev/null;;
+        udp) timeout -k 2 5 ss -naup 2>/dev/null;;
+        connections) timeout -k 2 5 ss -antp 2>/dev/null;;
+      esac
+    else
+      case "$socket_mode" in
+        listen) timeout -k 2 5 netstat -lntp 2>/dev/null;;
+        udp) timeout -k 2 5 netstat -anup 2>/dev/null;;
+        connections) timeout -k 2 5 netstat -antp 2>/dev/null;;
+      esac
+    fi
+    socket_rc=$?
+    if [ "$socket_record" = CONNECTION ]; then
+      case "$socket_rc" in
+        0) socket_state=COLLECTED;; 124|137) socket_state=TIMEOUT;; *) socket_state=FAILED;;
+      esac
+      printf '\nCONNECTION_STATUS\t%s\n' "$socket_state"
+    else printf '\nSOCKET_QUERY_STATUS\t%s\t%s\n' "$socket_protocol" "$socket_rc"; fi
+  ) | awk -v record="$socket_record" -v protocol="$socket_protocol" -v mode="$socket_mode" -v tool="$socket_tool" '
+    /^SOCKET_QUERY_STATUS\t/ || /^CONNECTION_STATUS\t/ { print; next }
+    $1 == "State" || $1 == "Netid" || $1 == "Proto" || $1 == "Active" { next }
+    NF {
+      state=($1 == "tcp" || $1 == "udp") ? $2 : $1
+      if (tool == "netstat") {
+        if ($1 !~ /^(tcp6?|udp6?)$/) next
+        state=$6
+      }
+      if (mode == "connections" && state == "LISTEN") next
+      format=protocol (tool == "netstat" ? "-netstat" : "")
+      printf "%s\t%s\t%s\n", record, format, $0
+    }
+  '
+}
+if [ -z "$socket_tool" ] || ! command -v timeout >/dev/null 2>&1; then
+  printf 'SOCKET_STATUS\tUNAVAILABLE\nCONNECTION_STATUS\tUNAVAILABLE\n'
 else
   (
-    for socket_protocol in tcp udp; do
-      (
-        if [ "$socket_protocol" = tcp ]; then
-          timeout -k 2 5 ss -lntp 2>/dev/null
-        else
-          timeout -k 2 5 ss -naup 2>/dev/null
-        fi
-        socket_rc=$?
-        printf '\nSOCKET_QUERY_STATUS\t%s\t%s\n' "$socket_protocol" "$socket_rc"
-      ) | awk -v protocol="$socket_protocol" '
-        /^SOCKET_QUERY_STATUS\t/ { print; next }
-        # Older iproute2 has no -H option. Skip only the known column header.
-        $1 == "State" || $1 == "Netid" { next }
-        NF { printf "SOCKET\t%s\t%s\n", protocol, $0 }
-      '
-    done
+    observer_socket_query SOCKET tcp listen
+    observer_socket_query SOCKET udp udp
   ) | head -c 524288 | awk '
     /^SOCKET\t/ { count++; if (count <= 4096) print; else limited=1; next }
     /^SOCKET_QUERY_STATUS\t/ { print; next }
     END { if (limited) print "SOCKET_STATUS\tTRUNCATED"; }
   '
+  observer_socket_query CONNECTION tcp connections | head -c 524288 | awk '
+    /^CONNECTION\t/ { count++; if (count <= 4096) print; else limited=1; next }
+    /^CONNECTION_STATUS\t/ { complete=1; print; next }
+    END { if (limited || !complete) print "CONNECTION_STATUS\tTRUNCATED"; }
+  '
 fi
+# Read kernel allocation settings as data; an empty reserved list is valid evidence.
+for socket_setting in ip_local_port_range ip_local_reserved_ports; do
+  socket_value=""; socket_state=UNAVAILABLE
+  if [ -r "/proc/sys/net/ipv4/$socket_setting" ] && command -v timeout >/dev/null 2>&1; then
+    socket_value=$(timeout -k 1 2 head -c 4097 "/proc/sys/net/ipv4/$socket_setting" 2>/dev/null)
+    socket_rc=$?
+    case "$socket_rc" in 0) socket_state=COLLECTED;; 124|137) socket_state=TIMEOUT;; *) socket_state=FAILED;; esac
+    if [ "${#socket_value}" -gt 4096 ]; then socket_state=TRUNCATED; socket_value=""; fi
+    socket_value=$(printf '%s' "$socket_value" | tr '\t\r\n' '   ')
+  fi
+  printf 'NET_SETTING\t%s\t%s\t%s\n' "$socket_setting" "$socket_state" "$socket_value"
+done

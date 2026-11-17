@@ -118,12 +118,17 @@ public class ExcelReports {
             String rpmFallback = report.assessment() == null ? "미실시" : report.assessment().coverage().stream().anyMatch(c -> c.kind().equals("RPM")) ? "미판정" : "미실시(이전 점검)";
             rpm.packages().forEach(p -> packages.add(p.name(), p.epoch(), p.version(), p.release(), p.architecture(), p.nevra(),
                     rpmStates.getOrDefault(com.wook.observer.model.Assessment.rpmAsset(p), rpmFallback), p.sourceRpm(), p.modularityLabel(), p.vendor()));
-            var sockets = report.systemInventory().sockets();
-            Table ports = table(workbook, styles, tables, "열린 포트", sockets.status().label() + ": " + sockets.message()
-                    + " ss -H -lntp / ss -H -naup. 프로토콜별 5초·4,096개·512 KiB 제한. 현재 네트워크 네임스페이스이며 방화벽·외부 접속 가능성은 별도 확인.",
-                    "프로토콜", "바인딩 주소", "포트", "상태", "PID · 프로세스");
-            sockets.entries().forEach(s -> ports.add(s.protocol(), s.localAddress(), s.localPort(), s.state(),
-                    s.processes().isEmpty() ? "미확인(권한/프로세스 종료 등)" : String.join(", ", s.processes().stream().map(p -> "PID " + p.pid() + " / " + p.name()).toList())));
+            var network = com.wook.observer.model.NetworkObservation.from(report);
+            Table ports = table(workbook, styles, tables, "열린 포트", NetworkReports.NOTE,
+                    "프로토콜", "바인딩 주소", "포트", "상태", "PID · 프로세스", "상대 주소:포트", "분류 근거", "도구");
+            for (var entry : network.entries()) {
+                var socket = entry.socket();
+                ports.add(socket.protocol(), socket.localAddress(), socket.localPort(), socket.state(), com.wook.observer.model.NetworkObservation.owners(entry),
+                        com.wook.observer.model.NetworkObservation.endpoint(socket.peerAddress(), socket.peerPort()), entry.classification(), socket.source());
+            }
+            summary.add("TCP 연결 수집 상태", network.connections().message());
+            summary.add("TCP 연결 수", network.connections().count());
+            for (var setting : network.settings()) summary.add(setting.source(), setting.status().label() + " / " + setting.value());
 
             Table categories = table(workbook, styles, tables, "직군별 현황", "명세 열의 링크를 누르면 해당 직군의 상세 시트로 이동합니다.",
                     "직군", "코드", "프로세스 수", "JVM 수", "라이브러리 항목 수", "컨테이너 수", "프로세스 명세", "오픈소스 명세", "컨테이너 명세");

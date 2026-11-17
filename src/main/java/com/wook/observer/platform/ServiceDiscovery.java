@@ -59,6 +59,7 @@ public final class ServiceDiscovery {
         Map<Long, TreeSet<String>> bindings = new LinkedHashMap<>();
         Map<Long, String> names = new LinkedHashMap<>();
         for (var socket : report.systemInventory().sockets().entries()) {
+            if (socket.protocol().equals("TCP") && !socket.state().equals("LISTEN")) continue;
             String binding = binding(socket);
             if (socket.processes().isEmpty()) {
                 String key = key("socket", binding);

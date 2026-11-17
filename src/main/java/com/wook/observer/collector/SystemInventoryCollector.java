@@ -28,7 +28,7 @@ public class SystemInventoryCollector {
             if (!System.getProperty("os.name").equalsIgnoreCase("Linux")) {
                 throw new IOException("Unsupported OS");
             }
-            var result = commands.run(List.of("sh", "-s"), script(), Duration.ofSeconds(45), 5 * 1024 * 1024);
+            var result = commands.run(List.of("sh", "-s"), script(), Duration.ofSeconds(60), 6 * 1024 * 1024);
             if (!result.success()) {
                 issues.add(new Issue("os", "local inventory", result.failure()));
                 return failed();

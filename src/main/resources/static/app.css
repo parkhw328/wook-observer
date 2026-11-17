@@ -1007,3 +1007,27 @@ dialog.service-editor { width: min(1440px, calc(100% - 40px)); max-width: calc(1
   .import-facts { grid-template-columns: 1fr; gap: 4px; }
   .import-facts dd { margin-bottom: 12px; }
 }
+
+.network-panel { min-width: 0; font-size: 13px; }
+.network-panel > summary { cursor: pointer; font-weight: 700; padding: 2px 0; }
+.network-panel > summary span { margin-left: 12px; font-size: 12px; font-weight: 400; color: var(--muted); }
+.network-body { margin-top: 14px; }
+.network-filter { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin: 12px 0; }
+.network-filter label { flex: 1 1 200px; }
+.network-filter input, .network-filter select { font-size: 13px; padding: 8px; }
+.network-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin: 10px 0; }
+.network-panel button { padding: 7px 10px; font-size: 12px; }
+.network-panel button[aria-pressed="true"] { color: #a93904; background: #fff0e5; border-color: #ff791b; }
+.network-table { overflow: auto; max-height: 430px; border: 1px solid var(--line); border-radius: 8px; }
+.network-table table { min-width: 940px; font-size: 12px; }
+.network-table td { max-width: 280px; overflow-wrap: anywhere; }
+.network-table th { position: sticky; top: 0; z-index: 1; background: #f6f5f3; }
+.network-pagination { display: flex; justify-content: end; align-items: center; gap: 10px; margin-top: 10px; font-size: 12px; }
+.network-evidence { color: var(--muted); font-size: 12px; }
+@media (max-width: 740px) { .network-panel > summary span { display: block; margin: 6px 0 0; } }
+
+.note.os-support-notice.els-recorded { border-color: #bfd7e3; border-left-color: #32789b; background: #f0f8fc; color: #28546b; }
+.os-support-notice.els-recorded > strong { color: #28546b; }
+.els-contract-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 18px; align-items: center; margin: 14px 0; padding: 12px; border: 1px solid #e6e0d9; border-radius: 8px; }
+.els-contract-fields p { grid-column: 1 / -1; margin: 0; }
+@media (max-width: 740px) { .els-contract-fields { grid-template-columns: 1fr; } }

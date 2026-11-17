@@ -25,6 +25,41 @@ class AssetInventoryTest {
     private final JsonMapper json = JsonMapper.builder().build();
 
     @Test
+    void elsContractSurvivesRescansAndOldClientsAndCanBeExplicitlyCleared() {
+        String target = target();
+        var report = OsLifecycleTest.report("ID=rhel\nVERSION_ID=7.9", "");
+        complete(target, report, 0);
+        assets.saveProfile(target, contract(0, true, "2029-05-31"), "admin");
+        var saved = asset(target);
+        assertThat(saved).containsEntry("els_contract", true).containsEntry("els_valid_until", "2029-05-31").containsEntry("els_confirmed_by", "admin");
+        assertThat(Store.string(saved, "els_confirmed_at")).isNotEmpty();
+        assertThat(((OsLifecycle.Support) saved.get("os_support")).status()).isEqualTo("ELS_RECORDED");
+        complete(target, report, 0);
+        assets.saveProfile(target, profile(1), "admin");
+        assertThat(asset(target)).containsEntry("els_contract", true).containsEntry("els_confirmed_at", saved.get("els_confirmed_at"));
+        assets.saveProfile(target, contract(2, true, "2029-05-31"), "admin");
+        assertThat(asset(target)).containsEntry("els_confirmed_at", saved.get("els_confirmed_at"));
+        assets.saveProfile(target, contract(3, false, ""), "admin");
+        assertThat(asset(target)).containsEntry("els_contract", false).containsEntry("els_valid_until", "").containsEntry("els_confirmed_by", "");
+        assertThat(((OsLifecycle.Support) asset(target).get("os_support")).upgradeRequired()).isTrue();
+    }
+
+    @Test
+    void invalidContractDatesRollBackTheEntireProfileEdit() {
+        String target = target();
+        assets.saveProfile(target, profile(0), "admin");
+        var before = asset(target);
+        for (String invalid : List.of("", "bad", "2026-02-30", "2024-06-30", "2029-06-01")) {
+            assertThatThrownBy(() -> assets.saveProfile(target, contract(1, true, invalid), "admin")).isInstanceOf(ApiProblem.class);
+            assertThat(asset(target)).isEqualTo(before);
+        }
+    }
+
+    private Assets.ProfileInput contract(int revision, boolean checked, String end) {
+        return new Assets.ProfileInput("ELS-01", "PRODUCTION", "운영팀", "IDC", "업무", "ACTIVE", "계약 확인", revision, checked, end);
+    }
+
+    @Test
     void savesExpandedServiceTypesAndPreservesThemAcrossObservationRefresh() {
         String target = target();
         complete(target, ServiceDiscoveryTest.host(100, 8080), 0);

@@ -159,15 +159,7 @@ public class MarkdownReports {
     }
 
     private String listeningPorts(Observation report) {
-        var sockets = report.systemInventory().sockets();
-        var out = new StringBuilder("# 열린 포트 명세\n\n근거: `ss -H -lntp` (TCP 리스닝), `ss -H -naup` (UDP 바인딩). ")
-                .append("현재 네트워크 네임스페이스의 조회이며 외부에서 접속 가능하다는 뜻은 아닙니다. 방화벽·NAT·컨테이너 내부 포트는 별도 확인합니다.\n\n")
-                .append("상태: ").append(sockets.status().label()).append(" / 소켓 ").append(sockets.entries().size()).append("개\n\n")
-                .append(cell(sockets.message())).append(" 프로토콜별 5초·전체 4,096개·512 KiB 제한. 같은 포트의 IPv4/IPv6 바인딩은 별도 소켓입니다.\n\n")
-                .append("| 프로토콜 | 바인딩 주소 | 포트 | 상태 | PID · 프로세스 |\n| --- | --- | --- | --- | --- |\n");
-        sockets.entries().forEach(s -> row(out, s.protocol(), s.localAddress(), s.localPort(), s.state(),
-                s.processes().isEmpty() ? "미확인(권한/프로세스 종료 등)" : String.join(", ", s.processes().stream().map(p -> "PID " + p.pid() + " / " + p.name()).toList())));
-        return out.toString();
+        return "# 네트워크 관측\n\n" + NetworkReports.markdown(com.wook.observer.model.NetworkObservation.from(report));
     }
 
     private String containers(Observation report, ServiceCategory category) {

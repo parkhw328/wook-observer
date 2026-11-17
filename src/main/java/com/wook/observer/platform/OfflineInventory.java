@@ -28,7 +28,7 @@ public class OfflineInventory {
             Map.entry("LIBRARY", 32768), Map.entry("LIBISSUE", 2048), Map.entry("CONTAINER", 256), Map.entry("CPIDS", 256),
             Map.entry("FACT", 6), Map.entry("ISSUE", 2048), Map.entry("OSINFO", 7), Map.entry("RPM", 20000),
             Map.entry("RPM_STATUS", 1), Map.entry("RPM_REPO", 256), Map.entry("RPM_REPO_STATUS", 128),
-            Map.entry("RPM_RELEASEVER", 1), Map.entry("SOCKET", 4096), Map.entry("SOCKET_STATUS", 1), Map.entry("SOCKET_QUERY_STATUS", 2));
+            Map.entry("RPM_RELEASEVER", 1), Map.entry("SOCKET", 4096), Map.entry("SOCKET_STATUS", 1), Map.entry("SOCKET_QUERY_STATUS", 2), Map.entry("CONNECTION", 4096), Map.entry("CONNECTION_STATUS", 2), Map.entry("NET_SETTING", 2));
     private final SshCollector collector;
     public OfflineInventory(SshCollector collector) { this.collector = collector; }
 

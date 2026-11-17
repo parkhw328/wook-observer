@@ -42,7 +42,8 @@ public class SshCollector {
         var system = report.systemInventory();
         OperationLog.info("ssh.inventory.parsed", "durationMs", OperationLog.elapsed(timer), "processes", report.processes().size(),
                 "jvms", report.javaProcesses().size(), "containers", report.containers().size(), "rpmStatus", system.rpm().status(),
-                "rpmPackages", system.rpm().packages().size(), "socketStatus", system.sockets().status(), "sockets", system.sockets().entries().size(), "issues", report.issues().size());
+                "rpmPackages", system.rpm().packages().size(), "socketStatus", system.sockets().status(), "sockets", system.sockets().entries().size(),
+                "connectionStatus", system.connections().status(), "tcpConnections", system.connections().entries().size(), "issues", report.issues().size());
         if (!report.issues().isEmpty()) OperationLog.warn("ssh.inventory.partial", "issues", report.issues().size());
         OperationLog.debug("ssh.inventory.scope", "rpmStatus", system.rpm().status(), "socketStatus", system.sockets().status());
         return new Observation(report.version(), started, report.host(), report.processes(), report.javaProcesses(), report.containers(), report.issues(), report.facts(), null, report.systemInventory());
@@ -159,7 +160,7 @@ public class SshCollector {
             facts.put("host:identity_source", "uname_all");
             issues.add(new Observation.Issue("host", "호스트명", "기본 호스트명이 비어 있어 파일의 uname -a 근거로 보완했습니다. 최신 수집 SH를 사용하세요."));
         }
-        return new Observation("1.11.0", Instant.now(), new Observation.Host(hostName, "Linux", host[2], host[3], Integer.parseInt(host[4]),
+        return new Observation("1.12.0", Instant.now(), new Observation.Host(hostName, "Linux", host[2], host[3], Integer.parseInt(host[4]),
                 (long) Double.parseDouble(host[5]), scope, dockerVersion), linked, java, containers, issues, facts, null, inventory);
     }
 }

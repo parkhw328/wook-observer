@@ -1,5 +1,5 @@
 #!/bin/sh
-# Observer 1.11.0: run on the Linux server being inspected.
+# Observer 1.12.0: run on the Linux server being inspected.
 # Usage: sh observer-collect.sh [output-directory]
 # No network transfer, installation, service changes or automatic privilege escalation.
 set -eu
@@ -61,11 +61,12 @@ awk -F '\t' '
   $1 == "RPM" { packages++ }
   $1 == "RPM_STATUS" { rpm=$2 }
   $1 == "SOCKET" { sockets++ }
-  END { printf "Collected: processes=%d, RPM=%d (%s), socket records=%d. Missing optional tools are recorded in the file.\n", processes, packages, rpm, sockets }
+  $1 == "CONNECTION" { connections++ }
+  END { printf "Collected: processes=%d, RPM=%d (%s), socket records=%d, TCP connection records=%d. Missing optional tools are recorded in the file.\n", processes, packages, rpm, sockets, connections }
 ' "$observer_work/payload" >&2
 observer_hash=$(sha256sum "$observer_work/payload" | awk '{print $1}')
 {
-  printf 'OBSERVER_OFFLINE\t1\nVERSION\t1.11.0\nCOLLECTED_AT\t%s\nSHA256\t%s\n\n' "$observer_time" "$observer_hash"
+  printf 'OBSERVER_OFFLINE\t1\nVERSION\t1.12.0\nCOLLECTED_AT\t%s\nSHA256\t%s\n\n' "$observer_time" "$observer_hash"
   cat "$observer_work/payload"
 } > "$observer_result"
 observer_success=1

@@ -23,6 +23,18 @@ class ServiceDiscoveryTest {
     }
 
     @Test
+    void transientConnectionsNeverChangeServiceKeysOrCreateEphemeralServiceRows() {
+        var original = host(100, 443);
+        var sockets = original.systemInventory().sockets();
+        var connections = new SystemInventory.SocketInventory(SystemInventory.Status.COLLECTED, "fixture", List.of(
+                new SystemInventory.Socket("TCP", "ESTABLISHED", "127.0.0.1", 54000, List.of(new SystemInventory.SocketProcess(100,"nginx")), "192.0.2.1", 443, "ss"),
+                new SystemInventory.Socket("TCP", "TIME_WAIT", "127.0.0.1", 54001, List.of(), "192.0.2.2", 443, "ss")));
+        var report = new Observation(original.version(), original.collectedAt(), original.host(), original.processes(), original.javaProcesses(), original.containers(),
+                original.issues(), original.facts(), original.assessment(), new SystemInventory(original.systemInventory().os(), null, sockets, connections, List.of()));
+        assertThat(ServiceDiscovery.discover(report)).isEqualTo(ServiceDiscovery.discover(original));
+    }
+
+    @Test
     void pidChangesKeepIdentityButDistinctEndpointsDoNotMerge() {
         var first = ServiceDiscovery.discover(host(100, 8080)).getFirst();
         var restarted = ServiceDiscovery.discover(host(900, 8080)).getFirst();

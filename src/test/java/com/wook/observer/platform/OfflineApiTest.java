@@ -28,6 +28,7 @@ class OfflineApiTest {
     void authenticatesDownloadsAndRequiresAdminAndCsrfForImports() throws Exception {
         var anonymous = new Client();
         assertThat(anonymous.get("/offline.js").statusCode()).isEqualTo(200);
+        assertThat(anonymous.get("/network.js").statusCode()).isEqualTo(200);
         assertThat(anonymous.get("/asset-report.js").statusCode()).isEqualTo(200);
         assertThat(anonymous.get("/api/collector/observer-collect.sh").statusCode()).isEqualTo(401);
         assertThat(anonymous.get("/api/assets/report.md").statusCode()).isEqualTo(401);

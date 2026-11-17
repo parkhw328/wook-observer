@@ -53,9 +53,9 @@ public final class OsLifecycle {
         if (!id.isEmpty()) {
             // ID_LIKE and kernel versions never identify the distribution; derivatives are not RHEL.
             if (id.equals("centos") && (display.contains("Stream") || values.getOrDefault("NAME", "").contains("Stream"))) id = "centos-stream";
-            if (version.isEmpty()) {
+            if (version.isEmpty() || version.equals("7")) {
                 var fallback = fromName(legacy, "/etc/redhat-release");
-                if (fallback.id().equals(id)) version = fallback.version();
+                if (fallback.id().equals(id) && (version.isEmpty() || fallback.version().startsWith("7."))) version = fallback.version();
             }
             return new Identity(id, version, display, "/etc/os-release");
         }
@@ -83,6 +83,33 @@ public final class OsLifecycle {
     public static Support forSummary(ServiceDiscovery.Summary summary) {
         return evaluate(summary == null ? null : summary.osIdentity() != null ? summary.osIdentity()
                 : fromName(summary.distribution(), "저장된 OS 표시명"));
+    }
+    public static Support forAsset(ServiceDiscovery.Summary summary, Map<String, Object> asset) {
+        Identity identity = summary == null ? null : summary.osIdentity() != null ? summary.osIdentity()
+                : fromName(summary.distribution(), "저장된 OS 표시명");
+        return withContract(identity, asset, LocalDate.now(ZoneOffset.UTC));
+    }
+    public static Support withContract(Identity identity, Map<String, Object> asset) {
+        return withContract(identity, asset, LocalDate.now(ZoneOffset.UTC));
+    }
+    static Support withContract(Identity identity, Map<String, Object> asset, LocalDate today) {
+        Support base = evaluate(identity, today);
+        if (!Boolean.TRUE.equals(asset.get("els_contract")) || identity == null || !identity.id().equals("rhel")
+                || !identity.version().matches("7(?:\\.[0-9]+)*")) return base;
+        String until = String.valueOf(asset.getOrDefault("els_valid_until", ""));
+        LocalDate contractEnd;
+        try { contractEnd = LocalDate.parse(until); }
+        catch (RuntimeException invalid) { return base; }
+        if (contractEnd.isBefore(LocalDate.of(2024, 7, 1)) || contractEnd.isAfter(LocalDate.of(2029, 5, 31))) return base;
+        if (!identity.version().matches("7\\.9(?:\\.[0-9]+)*"))
+            return new Support("ELS_VERSION_CHECK", true, "ELS 적용 버전 확인 필요", base.endedOn(), base.extendedUntil(),
+                    "ELS 계약을 등록했지만 수집 OS에서 RHEL 7.9 적용이 확인되지 않았습니다. 계약 종료일 " + until + ".", base.action(), base.sourceUrl(), VERIFIED, today.toString());
+        if (today.isAfter(contractEnd) || today.isAfter(LocalDate.parse("2029-05-31")))
+            return new Support("ELS_EXPIRED", true, "등록된 ELS 계약 기간 종료", base.endedOn(), base.extendedUntil(),
+                    "운영자가 등록한 ELS 계약 종료일 " + until + ". 유효한 계약을 확인하거나 OS 전환을 진행하세요.", base.action(), base.sourceUrl(), VERIFIED, today.toString());
+        return new Support("ELS_RECORDED", false, "ELS 계약 확인", base.endedOn(), base.extendedUntil(),
+                "운영자 확인으로 등록한 계약 종료일 " + until + ". 자동 계약 조회 결과가 아니며, 실제 지원 범위는 계약 조건을 따릅니다.",
+                "등록된 계약 기간에는 반복 경고를 제외합니다. 만료 전 OS 전환을 준비하세요.", base.sourceUrl(), VERIFIED, today.toString());
     }
     static Support evaluate(Identity identity, LocalDate today) {
         if (identity == null || !identity.version().matches("7(?:\\.[0-9]+)*")
