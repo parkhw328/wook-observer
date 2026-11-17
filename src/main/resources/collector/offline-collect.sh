@@ -1,5 +1,5 @@
 #!/bin/sh
-# Observer 1.10.0: run on the Linux server being inspected.
+# Observer 1.10.1: run on the Linux server being inspected.
 # Usage: sh observer-collect.sh [output-directory]
 # No network transfer, installation, service changes or automatic privilege escalation.
 set -eu
@@ -44,7 +44,7 @@ if [ "$observer_size" -gt 16776000 ] || [ "$(tail -n 1 "$observer_work/payload")
 fi
 observer_hash=$(sha256sum "$observer_work/payload" | awk '{print $1}')
 {
-  printf 'OBSERVER_OFFLINE\t1\nVERSION\t1.10.0\nCOLLECTED_AT\t%s\nSHA256\t%s\n\n' "$observer_time" "$observer_hash"
+  printf 'OBSERVER_OFFLINE\t1\nVERSION\t1.10.1\nCOLLECTED_AT\t%s\nSHA256\t%s\n\n' "$observer_time" "$observer_hash"
   cat "$observer_work/payload"
 } > "$observer_result"
 observer_success=1

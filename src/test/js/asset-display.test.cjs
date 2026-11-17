@@ -43,6 +43,38 @@ test('shows three separate PID badges and the remaining count without commas', (
   assert.ok(html.includes('+2') && !html.includes('45678') && !html.includes('56789'));
   assert.equal(context.observedPids({id:'manual'}), '');
 });
+test('keeps port provenance and missing-field hints in details, including manual and empty services', () => {
+  for (const item of [
+    {id:'empty', source:'AUTO', observation_status:'NOT_OBSERVED'},
+    {id:'manual', source:'MANUAL', bindings:'운영 <443>\n관리자 확인: 8443'},
+  ]) {
+    const summary = context.observedPorts(item);
+    const detail = context.portDetail(item);
+    assert.ok(summary.includes('data-asset-detail="ports"'));
+    assert.ok(!summary.includes('자동 관측') && !summary.includes('운영 포트 미입력'));
+    assert.ok(detail.includes('자동 관측') && detail.includes('운영 포트 / 보완'));
+    if (item.bindings) {
+      assert.ok(summary.includes('운영 &lt;443&gt;'));
+      assert.ok(detail.includes('운영 &lt;443&gt;\n관리자 확인: 8443'));
+    } else {
+      assert.ok(summary.includes('—'));
+      assert.ok(detail.includes('이전 수집') && detail.includes('미확인') && detail.includes('운영 포트 미입력'));
+    }
+  }
+});
+test('bounds long PID previews without losing identifiers or changing their formatting', () => {
+  const pids = [1234567,2345678,3456789,4567890];
+  const summary = context.observedPids({id:'long', observed:{pids}});
+  assert.equal((summary.match(/class="pid-chip"/g) || []).length, 2);
+  assert.ok(summary.includes('+2') && !summary.includes('3456789'));
+  const detail = context.pidChips(pids);
+  assert.ok(pids.every(pid => detail.includes('>'+pid+'</span>')));
+  assert.ok(!detail.includes(','));
+  assert.deepEqual(pids, [1234567,2345678,3456789,4567890]);
+  const many = context.observedPids({id:'many', observed:{pids:Array.from({length:4096}, (_,i) => 10000+i)}});
+  assert.equal((many.match(/class="pid-chip"/g) || []).length, 2);
+  assert.ok(many.includes('+4094'));
+});
 
 const service = (name, executable = '', extra = {}) => ({source:'AUTO', observed:{kind:'PROCESS', name, executable, pids:[12345], runUser:'root', bindings:['TCP 0.0.0.0:22']}, ...extra});
 test('recognizes observed OS services and named kernel threads without changing their data', () => {

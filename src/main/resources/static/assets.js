@@ -102,7 +102,14 @@ function serviceGrid(services) {
     && (!query || [s.name, s.owner, s.software, s.bindings, s.install_path, s.data_path, s.log_path, s.observed?.name, s.observed?.bindings.join(" ")].join(" ").toLocaleLowerCase().includes(query)));
   const items = excludeSystemServices ? matching.filter(s => !isSystemService(s)) : matching;
   const hidden = matching.length - items.length;
-  return `<div class="panel-title"><p class="small" role="status">표시 ${number(items.length)} / 전체 ${number(services.length)}개${excludeSystemServices ? ` · 시스템 서비스 ${number(hidden)}개 제외` : ""} · 넓은 표는 좌우로 스크롤하세요.</p><div class="actions" aria-label="컬럼과 서비스 표시"><button type="button" data-action="service-columns" data-mode="operations" aria-pressed="${serviceColumns === "operations"}">운영 절차</button><button type="button" data-action="service-columns" data-mode="all" aria-pressed="${serviceColumns === "all"}">전체 항목</button><button type="button" data-action="toggle-system-services" aria-pressed="${excludeSystemServices}" aria-controls="service-ledger" title="커널·systemd·SSH·시간 동기화 등 확인 가능한 OS 기본 서비스를 숨깁니다. 다시 누르면 표시합니다.">시스템 서비스 항목 제외</button></div></div><div id="service-ledger" class="table-wrap service-grid ${serviceColumns === "operations" ? "operations" : ""}" tabindex="0" aria-label="서비스 운영대장 가로 스크롤"><table><thead><tr>${["서비스 / 분류", "SW / 버전", "담당 / 실행계정", "APP · DATA · LOG", "바인딩 포트 / 운영 포트", "시작 방법", "종료 방법", "상태 확인 방법", "연계 대상 / 메모", "관측 / 관리"].map(h => `<th scope="col">${h}</th>`).join("")}</tr></thead><tbody>${items.length ? items.map(serviceRow).join("") : `<tr><td colspan="10">${hidden ? "시스템 서비스 제외를 해제하면 숨긴 항목을 볼 수 있습니다." : "표시할 서비스가 없습니다. 검색 조건을 바꾸거나 수동 서비스를 추가하세요."}</td></tr>`}</tbody></table></div>`;
+  const columns = [
+    ["service", "서비스 / 분류"], ["software", "SW / 버전", true], ["owner", "담당 / 실행계정", true],
+    ["paths", "APP · DATA · LOG", true], ["ports", "바인딩 포트"], ["start", "시작 방법"],
+    ["stop", "종료 방법"], ["status", "상태 확인 방법"], ["notes", "연계 / 메모", true],
+    ["pids", "PID"], ["observation", "관측"], ...(admin() ? [["actions", "편집"]] : []),
+  ];
+  const visibleColumns = columns.filter(c => serviceColumns !== "operations" || !c[2]).length;
+  return `<div class="panel-title"><p class="small" role="status">표시 ${number(items.length)} / 전체 ${number(services.length)}개${excludeSystemServices ? ` · 시스템 서비스 ${number(hidden)}개 제외` : ""} · 넓은 표는 좌우로 스크롤하세요.</p><div class="actions" aria-label="컬럼과 서비스 표시"><button type="button" data-action="service-columns" data-mode="operations" aria-pressed="${serviceColumns === "operations"}">운영 절차</button><button type="button" data-action="service-columns" data-mode="all" aria-pressed="${serviceColumns === "all"}">전체 항목</button><button type="button" data-action="toggle-system-services" aria-pressed="${excludeSystemServices}" aria-controls="service-ledger" title="커널·systemd·SSH·시간 동기화 등 확인 가능한 OS 기본 서비스를 숨깁니다. 다시 누르면 표시합니다.">시스템 서비스 항목 제외</button></div></div><div id="service-ledger" class="table-wrap service-grid ${serviceColumns === "operations" ? "operations" : ""}" tabindex="0" aria-label="서비스 운영대장 가로 스크롤"><table><thead><tr>${columns.map(([key, label, secondary]) => `<th scope="col" class="col-${key}${secondary ? " secondary-column" : ""}">${label}</th>`).join("")}</tr></thead><tbody>${items.length ? items.map(serviceRow).join("") : `<tr><td class="ledger-empty" colspan="${visibleColumns}">${hidden ? "시스템 서비스 제외를 해제하면 숨긴 항목을 볼 수 있습니다." : "표시할 서비스가 없습니다. 검색 조건을 바꾸거나 수동 서비스를 추가하세요."}</td></tr>`}</tbody></table></div>`;
 }
 
 // Display-only grouping. Original observations and service identities remain intact.
@@ -143,9 +150,17 @@ function portGroups(bindings = []) {
 
 function observedPorts(s) {
   const ports = portGroups(s.observed?.bindings);
-  return `<div class="small">자동 관측${s.observation_status === "NOT_OBSERVED" ? " · 이전 수집" : ""}</div>${ports.length
-    ? `<button type="button" class="port-preview" data-asset-detail="ports" data-service-id="${esc(s.id)}" aria-label="자동 관측 포트 ${ports.length}종 상세" aria-expanded="false" aria-controls="asset-popover"><span class="port-chips">${ports.slice(0, 4).map(p => `<span class="port-chip">${esc(p.label)}</span>`).join("")}${ports.length > 4 ? `<span class="port-more">+${ports.length - 4}</span>` : ""}</span><span class="port-detail-hint">주소·매핑 상세</span></button>`
-    : '<span class="muted">미확인</span>'}`;
+  // Keep only actual values in the cell; provenance and missing fields live in the shared detail popup.
+  return `<button type="button" class="port-preview" data-asset-detail="ports" data-service-id="${esc(s.id)}" aria-label="바인딩·운영 포트 상세 보기" aria-expanded="false" aria-controls="asset-popover">${ports.length
+    ? `<span class="port-chips">${ports.slice(0, 4).map(p => `<span class="port-chip">${esc(p.label)}</span>`).join("")}${ports.length > 4 ? `<span class="port-more">+${ports.length - 4}</span>` : ""}</span>` : ""}
+    ${s.bindings ? `<span class="managed-ports">${esc(s.bindings)}</span>` : ""}${!ports.length && !s.bindings ? '<span class="muted">—</span>' : ""}</button>`;
+}
+function portDetail(s) {
+  const ports = portGroups(s.observed?.bindings);
+  return `<div class="port-detail"><b>자동 관측${s.observation_status === "NOT_OBSERVED" ? " · 이전 수집" : ""}</b>${ports.length
+    ? ports.map(p => `<div class="port-binding"><span>${esc(p.label)}</span><div class="cell-lines">${p.values.map(esc).join("\n")}</div></div>`).join("")
+    : `<p class="small">${s.source === "MANUAL" ? "수동 등록 항목 · 자동 관측 없음" : "관측 포트 미확인 · 포트가 없다는 뜻은 아닙니다."}</p>`}</div>
+    <div class="port-detail"><b>운영 포트 / 보완</b><div class="cell-lines">${s.bindings ? esc(s.bindings) : "운영 포트 미입력"}</div></div>`;
 }
 function pidChips(pids) {
   return pids.map(pid => `<span class="pid-chip">${esc(pid)}</span>`).join(" ");
@@ -153,18 +168,39 @@ function pidChips(pids) {
 function observedPids(s) {
   const pids = s.observed?.pids || [];
   if (!pids.length) return "";
-  return `<button type="button" class="pid-preview" data-asset-detail="pids" data-service-id="${esc(s.id)}" aria-label="PID 전체 ${pids.length}개 보기" aria-expanded="false" aria-controls="asset-popover"><span>PID</span> ${pidChips(pids.slice(0, 3))}${pids.length > 3 ? ` <span class="pid-more">+${pids.length - 3}</span>` : ""}</button>`;
+  const preview = [];
+  let digits = 0;
+  for (const pid of pids.slice(0, 3)) {
+    const remaining = pids.length - preview.length - 1;
+    // Reserve space for badge padding and the remaining-count label in the fixed PID column.
+    const width = digits + String(pid).length + (preview.length + 1) * 2 + (remaining ? String(remaining).length + 1 : 0);
+    if (preview.length && width > 24) break;
+    preview.push(pid); digits += String(pid).length;
+  }
+  return `<button type="button" class="pid-preview" data-asset-detail="pids" data-service-id="${esc(s.id)}" aria-label="PID 전체 ${pids.length}개 보기" aria-expanded="false" aria-controls="asset-popover">${pidChips(preview)}${pids.length > preview.length ? ` <span class="pid-more">+${pids.length - preview.length}</span>` : ""}</button>`;
+}
+function observedStatus(s) {
+  const status = s.archived ? "보관" : {OBSERVED:"확인", NOT_OBSERVED:"미확인", MANUAL:"수동"}[s.observation_status] || "미확인";
+  return `<button type="button" class="observation-preview" data-asset-detail="observation" data-service-id="${esc(s.id)}" aria-label="관측 상태와 수정 이력 상세 보기" aria-expanded="false" aria-controls="asset-popover">${badge(status)}${s.last_seen_at ? `<span class="observation-time">${assetTime(s.last_seen_at)}</span>` : ""}</button>`;
+}
+function observationDetail(s) {
+  const status = {OBSERVED:"최근 수집 확인", NOT_OBSERVED:"최근 수집 미확인", MANUAL:"수동 등록"}[s.observation_status] || "미확인";
+  return `<div class="cell-lines">${esc(status)}${s.archived ? " · 보관" : ""}</div>${s.observation_status === "NOT_OBSERVED" ? '<p class="small">이전 관측값입니다. 중지·삭제로 판정하지 않습니다.</p>' : ""}
+    <div class="port-detail"><b>최근 관측</b><div>${s.last_seen_at ? date(s.last_seen_at) : "관측 이력 없음"}</div></div>
+    <div class="port-detail"><b>수기 정보 수정</b><div>${s.updated_at ? esc(s.updated_by) + " · " + date(s.updated_at) : "수정 이력 없음"}</div></div>`;
 }
 function serviceRow(s) {
   const o = s.observed;
-  return `<tr data-service="${esc(s.id)}"><td><b>${esc(s.name || o?.name || "이름 미입력")}</b><div class="small">${esc(serviceTypes[s.service_type])}</div><div class="small">${o ? esc(o.category) + " · " + esc({CONTAINER:"컨테이너", PROCESS:"프로세스", SOCKET:"소켓"}[o.kind]) : "수동 등록"}</div></td>
-    <td>${filled(s.software)}<div class="small">버전 ${filled(s.software_version)}</div>${o?.image ? `<div class="small">관측 이미지 ${esc(o.image)}</div>` : ""}</td>
-    <td>${filled(s.owner)}<div class="small">실행 ${filled(s.run_user || o?.runUser)}</div></td>
-    <td><div class="cell-lines"><span class="small">APP / 설치</span><br>${filled(s.install_path)}<br><span class="small">DATA</span><br>${filled(s.data_path)}<br><span class="small">LOG</span><br>${filled(s.log_path)}</div>${o?.executable ? `<details><summary>관측 실행 파일</summary>${esc(o.executable)}</details>` : ""}</td>
-    <td>${observedPorts(s)}${s.bindings ? `<div class="small">운영 포트 / 보완</div><div class="cell-lines">${esc(s.bindings)}</div>` : '<div class="small muted">운영 포트 미입력</div>'}</td>
-    <td class="cell-lines">${filled(s.start_command)}</td><td class="cell-lines">${filled(s.stop_command)}</td><td class="cell-lines">${filled(s.status_command)}</td>
-    <td><div class="small">연계 대상 / 방향</div><div class="cell-lines">${filled(s.dependencies)}</div><div class="small">메모</div><div class="cell-lines">${filled(s.notes)}</div></td>
-    <td>${badge(s.archived ? "보관" : {OBSERVED:"최근 수집 확인", NOT_OBSERVED:"최근 수집 미확인", MANUAL:"수동 등록"}[s.observation_status])}<div class="small">${assetTime(s.last_seen_at)}</div>${observedPids(s)}<div class="service-row-actions">${s.updated_at ? `<span class="small" title="수정 시각 ${date(s.updated_at)}">수정 ${esc(s.updated_by)}</span>` : ""}${admin() ? `<button data-action="edit-service" data-id="${esc(s.id)}">편집</button>` : ""}</div></td></tr>`;
+  return `<tr data-service="${esc(s.id)}"><td class="col-service"><b>${esc(s.name || o?.name || "이름 미입력")}</b><div class="small">${esc(serviceTypes[s.service_type])}</div><div class="small">${o ? esc(o.category) + " · " + esc({CONTAINER:"컨테이너", PROCESS:"프로세스", SOCKET:"소켓"}[o.kind]) : "수동 등록"}</div></td>
+    <td class="col-software secondary-column">${filled(s.software)}<div class="small">버전 ${filled(s.software_version)}</div>${o?.image ? `<div class="small">관측 이미지 ${esc(o.image)}</div>` : ""}</td>
+    <td class="col-owner secondary-column">${filled(s.owner)}<div class="small">실행 ${filled(s.run_user || o?.runUser)}</div></td>
+    <td class="col-paths secondary-column"><div class="ledger-fields"><span class="small">APP</span><span class="cell-lines">${filled(s.install_path)}</span><span class="small">DATA</span><span class="cell-lines">${filled(s.data_path)}</span><span class="small">LOG</span><span class="cell-lines">${filled(s.log_path)}</span></div>${o?.executable ? `<details><summary>관측 실행 파일</summary>${esc(o.executable)}</details>` : ""}</td>
+    <td class="col-ports">${observedPorts(s)}</td>
+    <td class="col-start cell-lines">${filled(s.start_command)}</td><td class="col-stop cell-lines">${filled(s.stop_command)}</td><td class="col-status cell-lines">${filled(s.status_command)}</td>
+    <td class="col-notes secondary-column"><div class="ledger-fields"><span class="small">연계</span><span class="cell-lines">${filled(s.dependencies)}</span><span class="small">메모</span><span class="cell-lines">${filled(s.notes)}</span></div></td>
+    <td class="col-pids">${observedPids(s) || '<span class="muted" title="관측 PID 없음 또는 미확인">—</span>'}</td>
+    <td class="col-observation">${observedStatus(s)}</td>
+    ${admin() ? `<td class="col-actions"><button data-action="edit-service" data-id="${esc(s.id)}" aria-label="${esc(s.name || o?.name || "서비스")} 편집">편집</button></td>` : ""}</tr>`;
 }
 
 function editService(id) {
@@ -292,9 +328,11 @@ function openAssetPopover(trigger, pinned = false) {
   const s = assetDetail?.services.find(row => row.id === trigger.dataset.serviceId);
   if (!s) return;
   closeAssetPopover();
-  const popup = $("#asset-popover"), pids = trigger.dataset.assetDetail === "pids";
-  popup.innerHTML = `<strong>${pids ? `PID · 전체 ${s.observed.pids.length}개` : "자동 관측 포트 · 주소·매핑"}</strong><p class="small">${esc(s.name || s.observed?.name)} · ${date(s.last_seen_at)}</p>`
-    + (pids ? `<p class="pid-values">${pidChips(s.observed.pids)}</p>` : portGroups(s.observed?.bindings).map(p => `<div class="port-detail"><b>${esc(p.label)}</b><div class="cell-lines">${p.values.map(esc).join("\n")}</div></div>`).join(""));
+  const popup = $("#asset-popover"), kind = trigger.dataset.assetDetail;
+  const pids = s.observed?.pids || [];
+  const heading = kind === "pids" ? `PID · 전체 ${pids.length}개` : kind === "ports" ? "바인딩·운영 포트" : "관측 정보";
+  popup.innerHTML = `<strong>${heading}</strong><p class="small">${esc(s.name || s.observed?.name || "서비스")}${s.last_seen_at && kind !== "observation" ? " · " + date(s.last_seen_at) : ""}</p>`
+    + (kind === "pids" ? `<p class="pid-values">${pidChips(pids)}</p>` : kind === "ports" ? portDetail(s) : observationDetail(s));
   assetPopoverTrigger = trigger; trigger.setAttribute("aria-expanded", "true"); trigger.setAttribute("aria-describedby", "asset-popover");
   assetPopoverPinned = pinned;
   popup.hidden = false;
