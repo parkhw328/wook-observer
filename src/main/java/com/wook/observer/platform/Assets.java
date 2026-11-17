@@ -23,13 +23,13 @@ public class Assets {
     private final AssetWorkbook workbook;
     private final JsonMapper json = JsonMapper.builder().build();
     private static final String ASSET_COLUMNS = """
-            SELECT t.id, t.name, t.host, t.port, t.description, t.collection_mode,
+            SELECT t.id, t.name, t.host, t.port, t.description, t.collection_mode, t.trash_revision,
                 p.asset_code, p.environment, p.owner, p.location, p.purpose, p.lifecycle, p.notes,
                 COALESCE(p.revision, 0) AS revision, p.updated_by, p.updated_at, p.els_contract, p.els_valid_until, p.els_confirmed_by, p.els_confirmed_at,
                 i.job_id, i.observed_at, i.summary_json, j.finding_count, j.collection_method, j.import_sha256,
                 a.id AS latest_job_id, a.status AS latest_status, a.created_at AS latest_attempt_at, a.message AS latest_message,
-                (SELECT COUNT(*) FROM asset_service s WHERE s.target_id=t.id AND s.archived=FALSE) AS service_count,
-                (SELECT COUNT(*) FROM asset_service s WHERE s.target_id=t.id AND s.archived=FALSE
+                (SELECT COUNT(*) FROM asset_service s WHERE s.target_id=t.id AND s.archived=FALSE AND s.deleted=FALSE) AS service_count,
+                (SELECT COUNT(*) FROM asset_service s WHERE s.target_id=t.id AND s.archived=FALSE AND s.deleted=FALSE
                     AND (s.start_command='' OR s.stop_command='' OR s.status_command='')) AS undocumented_count
             FROM scan_target t
             LEFT JOIN asset_profile p ON p.target_id=t.id
@@ -41,7 +41,7 @@ public class Assets {
     public Assets(Store store, AssetWorkbook workbook) { this.store = store; this.workbook = workbook; }
 
     public Map<String, Object> list() {
-        var rows = store.rows(ASSET_COLUMNS + " ORDER BY t.name, t.id").stream().map(this::asset).toList();
+        var rows = store.rows(ASSET_COLUMNS + " WHERE t.deleted=FALSE ORDER BY t.name, t.id").stream().map(this::asset).toList();
         return Map.of("items", rows, "summary", Map.of(
                 "total", rows.size(),
                 "unscanned", rows.stream().filter(row -> row.get("job_id") == null).count(),
@@ -55,8 +55,9 @@ public class Assets {
 
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public Map<String, Object> details(String target) {
-        var row = asset(store.one(ASSET_COLUMNS + " WHERE t.id=?", target));
-        return Map.of("asset", row, "services", services(row), "network", network(row), "jobs", store.rows(
+        var row = asset(store.one(ASSET_COLUMNS + " WHERE t.id=? AND t.deleted=FALSE", target));
+        return Map.of("asset", row, "services", services(row), "network", network(row), "history", store.rows(
+                "SELECT item_name, action, actor, occurred_at FROM asset_management_event WHERE target_id=? ORDER BY occurred_at DESC, id DESC LIMIT 20", target), "jobs", store.rows(
                 "SELECT id, target_id, target_name, requested_by, status, created_at, finished_at, message, finding_count, collection_method FROM scan_job WHERE target_id=? ORDER BY created_at DESC, id DESC LIMIT 20", target));
     }
 
@@ -69,20 +70,20 @@ public class Assets {
     /** Export saved asset data in one consistent read, without SSH access or reassessment. */
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public void export(String target, OutputStream output) throws IOException {
-        var rows = target == null ? store.rows(ASSET_COLUMNS + " ORDER BY t.name, t.id")
-                : List.of(store.one(ASSET_COLUMNS + " WHERE t.id=?", target));
+        var rows = target == null ? store.rows(ASSET_COLUMNS + " WHERE t.deleted=FALSE ORDER BY t.name, t.id")
+                : List.of(store.one(ASSET_COLUMNS + " WHERE t.id=? AND t.deleted=FALSE", target));
         workbook.write(rows.stream().map(this::asset).toList(), this::services, this::network, output);
     }
 
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public String markdown(String target) {
-        var rows = target == null ? store.rows(ASSET_COLUMNS + " ORDER BY t.name, t.id")
-                : List.of(store.one(ASSET_COLUMNS + " WHERE t.id=?", target));
+        var rows = target == null ? store.rows(ASSET_COLUMNS + " WHERE t.deleted=FALSE ORDER BY t.name, t.id")
+                : List.of(store.one(ASSET_COLUMNS + " WHERE t.id=? AND t.deleted=FALSE", target));
         return com.wook.observer.report.AssetMarkdown.write(rows.stream().map(this::asset).toList(), this::services, this::network);
     }
 
     private List<Map<String, Object>> services(Map<String, Object> row) {
-        var services = store.rows("SELECT * FROM asset_service WHERE target_id=? ORDER BY archived, source, id", row.get("id"));
+        var services = store.rows("SELECT * FROM asset_service WHERE target_id=? AND deleted=FALSE ORDER BY archived, source, id", row.get("id"));
         services.forEach(service -> {
             String observed = Store.string(service, "observed_json");
             service.remove("observed_json");
@@ -175,7 +176,7 @@ public class Assets {
             id = UUID.randomUUID().toString();
             store.jdbc.update("INSERT INTO asset_service(id, target_id, source_key, source) VALUES (?, ?, ?, 'MANUAL')", id, target, "manual:" + id);
         } else {
-            var row = store.one("SELECT revision, source FROM asset_service WHERE id=? AND target_id=?", id, target);
+            var row = store.one("SELECT revision, source FROM asset_service WHERE id=? AND target_id=? AND deleted=FALSE", id, target);
             checkRevision(input.revision(), ((Number) row.get("revision")).intValue());
             if ("MANUAL".equals(row.get("source")) && name.isBlank()) throw new ApiProblem(400, "수동 서비스 이름을 입력하세요.");
         }
@@ -225,7 +226,7 @@ public class Assets {
         else store.jdbc.update("UPDATE asset_inventory SET job_id=?, observed_at=?, summary_json=? WHERE target_id=?", job, observedAt, summary, target);
     }
 
-    private void lockTarget(String target) { store.one("SELECT id FROM scan_target WHERE id=? FOR UPDATE", target); }
+    private void lockTarget(String target) { AssetTrash.requireActive(store, target, true); }
     private static void checkRevision(Integer given, int actual) {
         if (given == null || given != actual) throw new ApiProblem(409, "다른 사용자가 수정했습니다. 입력 내용을 복사한 뒤 새로고침하고 다시 저장하세요.");
     }

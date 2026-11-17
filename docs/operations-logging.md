@@ -41,7 +41,8 @@ docker compose logs --since 1h app | rg 'jobId=여기에-점검-ID'
 | `ssh.inventory.parsed`, `ssh.inventory.partial` | 프로세스/JVM/컨테이너/RPM/소켓 건수, RPM·소켓 상태, 수집 문제 수 |
 | `scan.assessed` | 판정 시간·조치 수·사용한 카탈로그 개정 |
 | `asset.backfill.completed` | 기존 스냅샷에서 초기 반영한 자산 수·시간 |
-| `target.saved`, `asset.profile.saved`, `asset.service.saved` | 대상/서비스 ID·수정자·작업 종류·개정·보관 여부. 자산 변경 성공은 DB 커밋 후 기록 |
+| `target.saved`, `asset.profile.saved`, `asset.service.saved` | 대상/서비스 ID·수정자·작업 종류·개정·숨김 여부. 자산 변경 성공은 DB 커밋 후 기록 |
+| `asset.trash.changed` | 대상/서비스 ID·수행자·ASSET_DELETED/ASSET_RESTORED/SERVICE_DELETED/SERVICE_RESTORED. 이력과 변경이 DB에 커밋된 뒤 기록하며 이름·명령·접속 비밀은 제외 |
 | `asset.exported`, `report.downloaded` | 범위/점검 ID·형식·바이트·생성 시간 |
 | `catalog.import.started`, `catalog.import.completed`, `catalog.import.failed` | 반입 실행 ID·파일 크기·검증 레코드 수·SHA-256·시간·실패 |
 | `catalog.schedule.configured`, `catalog.schedule.triggered`, `catalog.source.loading`, `catalog.source.loaded`, `catalog.source.failed` | 예약 설정·다음 실행·파일/미러 읽기 결과 |

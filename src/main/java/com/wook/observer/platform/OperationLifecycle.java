@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
 public class OperationLifecycle {
     @EventListener(ApplicationReadyEvent.class)
     public void ready() {
-        OperationLog.info("application.ready", "version", "1.12.1", "java", Runtime.version(),
+        OperationLog.info("application.ready", "version", "1.13.0", "java", Runtime.version(),
                 "maxHeapMiB", Runtime.getRuntime().maxMemory() / (1024 * 1024), "scanWorkers", 2, "scanQueueCapacity", 16);
     }
     @EventListener(ContextClosedEvent.class)

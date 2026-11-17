@@ -1078,3 +1078,14 @@ main#content.target-workspace { max-width: none; padding: 20px; font-size: 14px;
   .inspection-modal .detail-grid div { padding: 8px; }
   main#content.target-workspace { padding: 14px 12px; }
 }
+
+/* Reversible removal stays separate from normal editing and compact ledger actions. */
+button.danger { color: #a22b23; border-color: #dcb1ab; background: #fff7f5; }
+button.danger:hover { background: #fce7e3; }
+.trash-dialog { width: min(580px, calc(100vw - 24px)); max-width: calc(100vw - 24px); max-height: calc(100dvh - 24px); padding: 24px; overflow: auto; font-size: 14px; }
+.trash-dialog h2 { font-size: 20px; margin-top: 0; }
+.trash-dialog p, .trash-dialog strong { overflow-wrap: anywhere; }
+.trash-dialog input, .trash-dialog button { font-size: 14px; }
+.trash-dialog .error:empty { display: none; }
+.trash-dialog .form-actions { flex-wrap: wrap; }
+@media (max-width: 740px) { .trash-dialog { padding: 18px; } }

@@ -3,7 +3,7 @@
 set -eu
 bundle_root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 cd "$bundle_root"
-app_image=wook-observer:1.12.1
+app_image=wook-observer:1.13.0
 
 fail() {
   printf '%s\n' "$*" >&2

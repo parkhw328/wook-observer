@@ -20,6 +20,7 @@ public class AssetBootstrap implements ApplicationRunner {
                 SELECT j.id FROM scan_job j WHERE j.status='COMPLETED' AND j.report_json IS NOT NULL
                 AND j.id=(SELECT z.id FROM scan_job z WHERE z.target_id=j.target_id AND z.status='COMPLETED'
                     ORDER BY z.created_at DESC, z.id DESC LIMIT 1)
+                AND EXISTS (SELECT 1 FROM scan_target t WHERE t.id=j.target_id AND t.deleted=FALSE)
                 AND NOT EXISTS (SELECT 1 FROM asset_inventory i WHERE i.target_id=j.target_id AND i.job_id=j.id)
                 """);
         for (var row : rows) assets.backfill(Store.string(row, "id"));

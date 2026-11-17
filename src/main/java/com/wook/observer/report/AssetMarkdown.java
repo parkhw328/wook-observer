@@ -27,7 +27,7 @@ public final class AssetMarkdown {
                                Function<Map<String, Object>, com.wook.observer.model.NetworkObservation> network) {
         var out = new StringBuilder("# 자산·서비스 운영 보고서\n\n");
         out.append("작성 시각 (UTC): ").append(Instant.now()).append("\n\n")
-                .append("등록 자산 ").append(assets.size()).append("대. 저장된 자산 정보와 전체 서비스(시스템 서비스·숨긴 서비스 포함)를 제공합니다. 화면 검색·제외 필터는 적용하지 않습니다.\n\n")
+                .append("등록 자산 ").append(assets.size()).append("대. 저장된 자산 정보와 전체 서비스(시스템 서비스·숨긴 서비스 포함)를 제공합니다. 휴지통의 자산·서비스는 제외합니다. 화면 검색·제외 필터는 적용하지 않습니다.\n\n")
                 .append("수기 운영 절차는 기록이며 실행되지 않습니다. 자동 관측은 서버별 수집 시각 기준이며 미관측은 중지·삭제를 의미하지 않습니다.\n\n")
                 .append("OS 지원 상태는 저장된 OS 근거와 문서 생성 시점의 내장 정책 기준입니다. ELS는 운영자가 등록한 계약과 종료일을 반영하며, 자동 계약 조회를 하지 않습니다. CVE 발견 건수와 별도로 관리합니다.\n\n")
                 .append("## 자산 목록\n\n| 서버명 | 주소 | 자산번호 | 서버 위치 | 담당 | 최근 수집 (UTC) | OS 지원 상태 |\n| --- | --- | --- | --- | --- | --- | --- |\n");

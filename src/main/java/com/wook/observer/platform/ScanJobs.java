@@ -26,10 +26,12 @@ public class ScanJobs implements ApplicationRunner {
     private final SshCollector collector;
     private final Assessor assessor;
     private final Assets assets;
+    private final org.springframework.transaction.support.TransactionTemplate transactions;
     private final JsonMapper json = JsonMapper.builder().build();
     private final ThreadPoolExecutor executor = new ThreadPoolExecutor(2, 2, 0, TimeUnit.SECONDS, new ArrayBlockingQueue<>(16));
-    public ScanJobs(Store store, Targets targets, SshCollector collector, Assessor assessor, Assets assets) {
+    public ScanJobs(Store store, Targets targets, SshCollector collector, Assessor assessor, Assets assets, org.springframework.transaction.PlatformTransactionManager manager) {
         this.store = store; this.targets = targets; this.collector = collector; this.assessor = assessor; this.assets = assets;
+        this.transactions = new org.springframework.transaction.support.TransactionTemplate(manager);
     }
 
     @Override
@@ -44,15 +46,20 @@ public class ScanJobs implements ApplicationRunner {
     }
 
     public synchronized String start(String targetId, String actor) {
-        var target = targets.credentials(targetId);
-        if ("UPLOAD".equals(target.get("collection_mode"))) throw new ApiProblem(400, "파일 업로드 자산입니다. 서버에서 수집 스크립트를 실행한 결과를 업로드하세요.");
-        if (!store.rows("SELECT id FROM scan_job WHERE target_id = ? AND status IN ('QUEUED', 'RUNNING')", targetId).isEmpty()) {
-            OperationLog.warn("scan.duplicate", "targetId", targetId);
-            throw new ApiProblem(409, "이 대상은 이미 점검 중입니다.");
-        }
         String id = UUID.randomUUID().toString();
-        store.jdbc.update("INSERT INTO scan_job(id, target_id, target_name, requested_by, status, created_at) VALUES (?, ?, ?, ?, 'QUEUED', ?)",
-                id, targetId, Store.string(target, "name"), actor, Instant.now().toString());
+        var target = transactions.execute(status -> {
+            AssetTrash.requireActive(store, targetId, true);
+            var row = targets.credentials(targetId);
+            if ("UPLOAD".equals(row.get("collection_mode"))) throw new ApiProblem(400, "파일 업로드 자산입니다. 서버에서 수집 스크립트를 실행한 결과를 업로드하세요.");
+            if (!store.rows("SELECT id FROM scan_job WHERE target_id=? AND status IN ('QUEUED','RUNNING')", targetId).isEmpty()) {
+                OperationLog.warn("scan.duplicate", "targetId", targetId);
+                throw new ApiProblem(409, "이 대상은 이미 점검 중입니다.");
+            }
+            store.jdbc.update("INSERT INTO scan_job(id, target_id, target_name, requested_by, status, created_at) VALUES (?, ?, ?, ?, 'QUEUED', ?)",
+                    id, targetId, Store.string(row, "name"), actor, Instant.now().toString());
+            return row;
+        });
+        // Commit the queued row before starting a worker; deletion now sees the in-flight job.
         var context = new LinkedHashMap<String, String>();
         var caller = org.slf4j.MDC.getCopyOfContextMap();
         if (caller != null) context.putAll(caller);

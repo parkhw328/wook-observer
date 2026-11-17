@@ -14,13 +14,13 @@ import java.util.UUID;
 @Service
 @Profile("!collector")
 public class Targets {
-    private static final String PUBLIC_COLUMNS = "id, name, host, port, ssh_user, description, created_by, created_at, auth_type, privilege_mode, collection_mode";
+    private static final String PUBLIC_COLUMNS = "id, name, host, port, ssh_user, description, created_by, created_at, auth_type, privilege_mode, collection_mode, trash_revision";
     private final Store store;
     private final SecretVault vault;
     public Targets(Store store, SecretVault vault) { this.store = store; this.vault = vault; }
 
     public List<Map<String, Object>> list() {
-        return store.rows("SELECT " + PUBLIC_COLUMNS + " FROM scan_target ORDER BY created_at DESC");
+        return store.rows("SELECT " + PUBLIC_COLUMNS + " FROM scan_target WHERE deleted=FALSE ORDER BY created_at DESC");
     }
 
     public Map<String, Object> details(String id) {
@@ -35,10 +35,12 @@ public class Targets {
         return safe;
     }
 
+    @org.springframework.transaction.annotation.Transactional
     public synchronized String save(String id, Input input, String actor) {
         validate(input);
         String hostKey = HostKeys.normalize(input.hostKey());
         boolean create = id == null;
+        if (!create) AssetTrash.requireActive(store, id, true);
         var existing = create ? Map.<String, Object>of() : credentials(id);
         if ("UPLOAD".equals(existing.get("collection_mode"))) throw new ApiProblem(400, "파일 업로드 자산은 업로드 자산 설정에서 수정하세요.");
         String auth = input.authType() == null ? "KEY" : input.authType();
@@ -74,7 +76,7 @@ public class Targets {
             store.jdbc.update("UPDATE scan_target SET name = ?, host = ?, port = ?, ssh_user = ?, private_key = ?, host_key = ?, description = ?, auth_type = ?, ssh_password = ?, key_passphrase = ?, privilege_mode = ?, privilege_password = ? WHERE id = ?",
                     input.name().strip(), input.host(), input.port(), input.sshUser(), key, hostKey, input.description(), auth, password, passphrase, privilege, elevationPassword, id);
         }
-        OperationLog.info("target.saved", "targetId", id, "actor", actor, "operation", create ? "CREATE" : "UPDATE", "authType", auth, "privilegeMode", privilege);
+        OperationLog.afterCommit("target.saved", "targetId", id, "actor", actor, "operation", create ? "CREATE" : "UPDATE", "authType", auth, "privilegeMode", privilege);
         return id;
     }
 
@@ -91,7 +93,8 @@ public class Targets {
             store.jdbc.update("INSERT INTO scan_target(id, name, host, port, ssh_user, private_key, host_key, description, created_by, created_at, collection_mode) VALUES (?, ?, ?, 22, '', '', '', ?, ?, ?, 'UPLOAD')",
                     id, input.name().strip(), input.host(), input.description(), actor, Instant.now().toString());
         } else {
-            var row = store.one("SELECT collection_mode FROM scan_target WHERE id=? FOR UPDATE", id);
+            AssetTrash.requireActive(store, id, true);
+            var row = store.one("SELECT collection_mode FROM scan_target WHERE id=?", id);
             if (!"UPLOAD".equals(row.get("collection_mode"))) throw new ApiProblem(400, "SSH 대상의 연결 설정은 점검 대상 화면에서 수정하세요.");
             store.jdbc.update("UPDATE scan_target SET name=?, host=?, description=? WHERE id=?", input.name().strip(), input.host(), input.description(), id);
         }
@@ -113,7 +116,7 @@ public class Targets {
         return result;
     }
 
-    public Map<String, Object> credentials(String id) { return store.one("SELECT * FROM scan_target WHERE id = ?", id); }
+    public Map<String, Object> credentials(String id) { return store.one("SELECT * FROM scan_target WHERE id = ? AND deleted=FALSE", id); }
     public String decryptKey(Map<String, Object> target) { return decrypt(target, "private_key"); }
     public String decrypt(Map<String, Object> target, String field) {
         if (!Set.of("private_key", "ssh_password", "key_passphrase", "privilege_password").contains(field)) { throw new IllegalArgumentException("Unknown credential field"); }

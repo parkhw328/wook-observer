@@ -42,6 +42,7 @@ public class OfflineImports {
         result.put("expectedHost", expected);
         result.put("identityMismatch", !expected.isEmpty() && !expected.equalsIgnoreCase(report.host().name()));
         var duplicate = store.rows("SELECT id, target_id FROM scan_job WHERE import_sha256=?", parsed.sha256());
+        if (!duplicate.isEmpty()) AssetTrash.requireActive(store, Store.string(duplicate.getFirst(), "target_id"), false);
         result.put("duplicate", duplicate.isEmpty() ? Map.of() : duplicate.getFirst());
         OperationLog.info("offline.previewed", "targetId", target.isEmpty() ? "NEW" : target, "bytes", bytes.length,
                 "processes", report.processes().size(), "issues", report.issues().size());
@@ -59,12 +60,13 @@ public class OfflineImports {
         var duplicate = store.rows("SELECT id, target_id FROM scan_job WHERE import_sha256=?", parsed.sha256());
         if (!duplicate.isEmpty()) {
             var previous = duplicate.getFirst();
+            AssetTrash.requireActive(store, Store.string(previous, "target_id"), true);
             if (!target.isEmpty() && !target.equals(previous.get("target_id"))) throw new ApiProblem(409, "이 파일은 다른 자산에 이미 반영되었습니다. 반영할 자산을 확인하세요.");
             OperationLog.info("offline.duplicate", "jobId", previous.get("id"), "targetId", previous.get("target_id"));
             return Map.of("id", previous.get("id"), "targetId", previous.get("target_id"), "duplicate", true);
         }
         if (target.isEmpty()) target = targets.saveUpload(null, new Targets.UploadInput(name, host, ""), actor);
-        else store.one("SELECT id FROM scan_target WHERE id=? FOR UPDATE", target);
+        else AssetTrash.requireActive(store, target, true);
         if (!store.rows("SELECT id FROM scan_job WHERE target_id=? AND status IN ('QUEUED','RUNNING')", target).isEmpty())
             throw new ApiProblem(409, "이 자산은 점검 중입니다. 완료 후 업로드하세요.");
         String expected = expectedHost(target);
@@ -84,7 +86,7 @@ public class OfflineImports {
 
     private String expectedHost(String target) {
         if (target.isEmpty()) return "";
-        store.one("SELECT id FROM scan_target WHERE id=?", target);
+        AssetTrash.requireActive(store, target, false);
         var current = store.rows("SELECT summary_json FROM asset_inventory WHERE target_id=?", target);
         return current.isEmpty() ? "" : json.readValue(Store.string(current.getFirst(), "summary_json"), ServiceDiscovery.Summary.class).host().name();
     }

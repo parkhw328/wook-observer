@@ -40,6 +40,7 @@ function assetTable(items) {
 }
 
 async function assetView() {
+  if (location.hash === "#assets/trash") return assetTrashView();
   if (location.hash === "#assets/report" || location.hash.startsWith("#assets/report/")) return assetReportView();
   const target = location.hash.startsWith("#assets/") ? decodeURIComponent(location.hash.slice(8)) : "";
   const revision = renderRevision;
@@ -57,7 +58,7 @@ async function assetView() {
   const selected = items.filter(a => (!query || [a.name, a.host, a.asset_code, a.owner, a.location, a.purpose, a.inventory?.distribution].join(" ").toLocaleLowerCase().includes(query))
     && (!environment || (a.environment || "UNSPECIFIED") === environment)
     && (!filter || (filter === "os-upgrade" && a.os_support?.upgradeRequired) || (filter === "unscanned" && !a.job_id) || (filter === "undocumented" && a.undocumented_count > 0) || (filter === "failed" && a.latest_status === "FAILED")));
-  return pageHead("자산 관리", "서버별 자산 정보와 서비스 운영대장을 함께 관리하세요.", `${admin() ? '<a class="button primary" href="#offline">수집 결과 업로드</a>' : ''}<a class="button" href="#assets/report">전체 자산 MD 보고서</a><button data-asset-export="" title="검색 조건과 관계없이 저장된 전체 자산·서비스를 내려받습니다.">전체 자산 XLSX</button><a class="button" href="#targets">점검 대상 관리 →</a>`) + assetKpis(summary)
+  return pageHead("자산 관리", "서버별 자산 정보와 서비스 운영대장을 함께 관리하세요.", `${admin() ? '<a class="button primary" href="#offline">수집 결과 업로드</a>' : ''}${trashLink()}<a class="button" href="#assets/report">전체 자산 MD 보고서</a><button data-asset-export="" title="검색 조건과 관계없이 저장된 전체 자산·서비스를 내려받습니다.">전체 자산 XLSX</button><a class="button" href="#targets">점검 대상 관리 →</a>`) + assetKpis(summary)
     + `<section class="panel"><form id="asset-search" class="asset-filters"><label>자산 검색<input name="query" maxlength="200" value="${esc(assetQuery)}" placeholder="서버·주소·자산번호·담당자"></label><label>환경<select name="environment"><option value="">전체 환경</option>${options(environments, environment)}</select></label><label>보완 상태<select name="filter">${options({"": "전체 자산", "os-upgrade": "OS 업그레이드 필요", unscanned: "점검 전", undocumented: "운영 절차 보완", failed: "최근 점검 실패"}, filter)}</select></label><button type="submit">검색</button></form><div class="panel-title"><h2>자산 목록</h2><span class="small">검색 ${number(selected.length)} / 전체 ${number(items.length)}대</span></div>${assetTable(selected)}</section>`;
 }
 
@@ -75,13 +76,14 @@ function assetProfile(a) {
 
 function assetDetailHtml(data) {
   const a = data.asset, i = a.inventory;
-  return pageHead(a.name, `${a.host} · ${a.asset_code || "자산번호 미입력"}`, `<a class="button" href="#assets">자산 목록</a><a class="button" href="#assets/report/${encodeURIComponent(a.id)}">자산 MD 보고서</a><button data-asset-export="${esc(a.id)}" title="이 자산의 저장된 전체 서비스(숨긴 서비스 포함)를 내려받습니다.">자산 XLSX</button><button data-action="refresh-asset">새로고침</button>${admin() ? `<a class="button" href="#offline/${encodeURIComponent(a.id)}">결과 업로드</a>` : ""}${a.collection_mode === "UPLOAD" ? `<a class="button" href="/api/collector/observer-collect.sh">수집 SH 다운로드</a>` : `<button class="primary" data-action="scan" data-id="${esc(a.id)}" ${["RUNNING", "QUEUED"].includes(a.latest_status) ? "disabled" : ""}>점검 시작</button>`}`, true)
+  return pageHead(a.name, `${a.host} · ${a.asset_code || "자산번호 미입력"}`, `<a class="button" href="#assets">자산 목록</a>${trashLink()}<a class="button" href="#assets/report/${encodeURIComponent(a.id)}">자산 MD 보고서</a><button data-asset-export="${esc(a.id)}" title="이 자산의 저장된 전체 서비스(숨긴 서비스 포함)를 내려받습니다.">자산 XLSX</button><button data-action="refresh-asset">새로고침</button>${admin() ? `<a class="button" href="#offline/${encodeURIComponent(a.id)}">결과 업로드</a>` : ""}${assetDeleteButton(a)}${a.collection_mode === "UPLOAD" ? `<a class="button" href="/api/collector/observer-collect.sh">수집 SH 다운로드</a>` : `<button class="primary" data-action="scan" data-id="${esc(a.id)}" ${["RUNNING", "QUEUED"].includes(a.latest_status) ? "disabled" : ""}>점검 시작</button>`}`, true)
     + (a.latest_status === "FAILED" ? `<div class="note warn">최근 점검 실패 · ${esc(a.latest_message)} 기존 수집 정보는 ${date(a.observed_at)} 기준입니다.</div>` : "")
     + `<div class="asset-summary panel"><div><span class="small">수집된 호스트 / OS</span><b>${esc(i?.host.name || "미수집")}</b><span>${esc(i?.distribution || "점검 후 표시됩니다")}</span></div><div><span class="small">CPU / 메모리</span><b>${i ? (i.host.processors || "미수집") + " CPU · " + memory(i.host.physicalMemoryBytes) : "미수집"}</b><span>${esc(i?.host.architecture || "")}</span></div><div><span class="small">수집 기준 시각</span><b>${date(a.observed_at)}</b><span>${a.latest_status ? badge(a.latest_status) : "점검 전"} ${a.job_id ? `· 발견·의심 ${number(a.finding_count)}건` : ""}</span></div></div>`
     + osSupportBanner(a.os_support) + assetProfile(a) + networkPanel(data.network, "asset")
     + `<section class="panel"><div class="panel-title"><div><h2>서비스 운영대장</h2><p class="small">서비스·포트·실행계정·경로와 운영 절차를 한 행에서 관리합니다.</p></div>${admin() ? '<button class="primary" data-action="add-service">+ 수동 서비스</button>' : '<span class="badge">조회 권한</span>'}</div>
     <div class="note">자동 수집은 최근 점검의 관측값입니다. 시작·종료·상태 확인 방법은 기록용이며 실행되지 않습니다. 수기 정보는 재점검 후에도 유지됩니다.${i ? `<br>포트 수집: ${esc({COLLECTED:"수집 완료", NOT_COLLECTED:"미수집", FAILED:"조회 실패", UNAVAILABLE:"도구 없음", TIMEOUT:"시간 제한", TRUNCATED:"일부 수집"}[i.socketStatus] || i.socketStatus)} · ${esc(i.socketMessage)} · 수집 제한 ${number(i.issueCount)}건` : ""}</div>
     <form id="service-search" class="asset-filters"><label>서비스 검색<input name="query" maxlength="200" value="${esc(serviceQuery)}" placeholder="서비스·SW·담당·포트·경로"></label><label>표시 항목<select name="filter">${options({active:"기본 목록", undocumented:"절차 보완", unobserved:"최근 수집 미확인", archived:"숨긴 서비스", all:"전체"}, serviceFilter)}</select></label><button type="submit">검색</button></form><div id="service-grid">${serviceGrid(data.services)}</div></section>`
+    + assetHistory(data.history)
     + `<section class="panel"><div class="panel-title"><h2>이 자산의 최근 점검</h2><span class="small">최근 20회 · 당시 보고서 보존</span></div>${jobsTable(data.jobs)}</section>`;
 }
 
@@ -239,7 +241,7 @@ function editService(id) {
     ${field("상태 확인 방법", "statusCommand", s.status_command, 4000, "상태 확인 명령 또는 점검 절차", 5)}</div></fieldset>
     <fieldset><legend>연계와 메모</legend><div class="editor-grid">${field("연계 대상 / 통신 방향", "dependencies", s.dependencies, 4000, "예: 내부 → 외부, 목적지:포트, 용도", 4)}${field("비고", "notes", s.notes, 4000, "운영 시 참고 사항", 4)}</div>
     <label class="check"><input type="checkbox" name="archived" ${s.archived ? "checked" : ""}>기본 목록에서 숨기기</label><p class="small">서비스를 삭제하지 않습니다. 저장 후 기본 목록과 서비스 집계에서 제외하며, ‘표시 항목 → 숨긴 서비스’에서 다시 열어 이 체크를 해제하면 복원됩니다. 수기 정보·수집 근거와 MD/XLSX에는 계속 포함됩니다.</p></fieldset></div>
-    <div class="editor-actions"><p class="error" role="alert"></p><span class="small">빈 수기 값은 미입력으로 저장합니다.</span><button type="button" data-action="cancel-service">취소</button><button type="submit" class="primary">서비스 저장</button></div></form>`;
+    <div class="editor-actions"><p class="error" role="alert"></p><span class="small">빈 수기 값은 미입력으로 저장합니다.</span>${id ? `<button type="button" class="danger quiet" data-action="delete-service" data-id="${esc(id)}">서비스 삭제</button>` : ""}<button type="button" data-action="cancel-service">취소</button><button type="submit" class="primary">서비스 저장</button></div></form>`;
   $("#service-editor").showModal();
   $("#service-edit input").focus();
 }
@@ -257,7 +259,7 @@ document.addEventListener("cancel", event => {
 
 function setAssetBusy(busy) {
   closeAssetPopover();
-  document.querySelectorAll('#service-search input, #service-search select, #service-search button, [data-asset-export], [data-action="refresh-asset"], [data-action="add-service"], [data-action="edit-service"], [data-action="service-columns"], [data-action="toggle-system-services"], #asset-profile input, #asset-profile select, #asset-profile textarea, #asset-profile button, [data-action="scan"]').forEach(el => el.disabled = busy);
+  document.querySelectorAll('#service-search input, #service-search select, #service-search button, [data-asset-export], [data-action="refresh-asset"], [data-action="add-service"], [data-action="delete-asset"], [data-action="edit-service"], [data-action="service-columns"], [data-action="toggle-system-services"], #asset-profile input, #asset-profile select, #asset-profile textarea, #asset-profile button, [data-action="scan"]').forEach(el => el.disabled = busy);
   const contract = $('#asset-profile [name="elsContract"]'), end = $('#asset-profile [name="elsValidUntil"]');
   if (contract && end) { contract.disabled = busy || !admin(); end.disabled = busy || !admin() || !contract.checked; }
 }
@@ -324,7 +326,7 @@ document.addEventListener("input", event => {
   const form = event.target.closest("#asset-profile");
   if (form) {
     form.dataset.dirty = "true";
-    document.querySelectorAll('[data-asset-export], [data-action="refresh-asset"], [data-action="scan"], [data-action="add-service"], [data-action="edit-service"]').forEach(button => button.disabled = true);
+    document.querySelectorAll('[data-asset-export], [data-action="refresh-asset"], [data-action="scan"], [data-action="add-service"], [data-action="delete-asset"], [data-action="edit-service"]').forEach(button => button.disabled = true);
   }
 });
 function hasAssetDraft() { return !!editingService || $("#asset-profile")?.dataset.dirty === "true"; }
