@@ -146,6 +146,7 @@ async function targetView() {
 async function targetForm(id) {
   const target = id ? await api("/admin/targets/" + encodeURIComponent(id)) : {};
   if (target.collection_mode === "UPLOAD") return offlineTargetForm(id);
+  $("#content").classList.remove("target-workspace");
   const selected = (value, expected) => value === expected ? "selected" : "";
   const auth = target.auth_type || "PASSWORD";
   $("#content").innerHTML = pageHead(
@@ -347,6 +348,9 @@ async function usersView() {
 }
 function userForm(button) {
   const edit = button.dataset.action === "edit-user";
+  $("#modal").classList.remove("inspection-modal");
+  $("#inspection-toolbar").hidden = true;
+  $("#modal").removeAttribute("aria-labelledby");
   $("#modal-content").innerHTML =
     `<h2>${edit ? "계정 편집" : "사용자 추가"}</h2><form id="user-form" data-edit="${edit}"><label>아이디<input name="username" required minlength="3" maxlength="64" pattern="[A-Za-z0-9][A-Za-z0-9._-]{2,63}" value="${esc(button.dataset.user)}" ${edit ? "readonly" : ""} autocomplete="off"></label><label>${edit ? "새 비밀번호 (빈칸이면 유지)" : "초기 비밀번호"}<input name="password" type="password" ${edit ? "" : "required"} minlength="8" autocomplete="new-password"><small>8자 이상, UTF-8 72바이트 이하</small></label><label>권한<select name="role"><option value="USER" ${button.dataset.role === "USER" ? "selected" : ""}>사용자 · 점검 / 조회</option><option value="ADMIN" ${button.dataset.role === "ADMIN" ? "selected" : ""}>관리자 · 전체 관리</option></select></label><label class="check"><input name="enabled" type="checkbox" ${!edit || button.dataset.enabled === "true" ? "checked" : ""}>계정 활성화</label><button class="primary" type="submit">저장</button></form>`;
   $("#modal").showModal();
@@ -382,8 +386,13 @@ async function detail(id) {
   const actions = operator.actions;
   const list = (values) => values.map(v => esc(v)).join("<br>");
   const location = l => l.pid == null ? (l.path || l.asset) : `PID ${l.pid}${l.containerId ? " / " + l.containerId : ""} / ${l.path}`;
+  $("#modal").classList.add("inspection-modal");
+  $("#inspection-toolbar").hidden = false;
+  $("#inspection-title").textContent = "점검 결과 · " + report.host.name;
+  $("#inspection-downloads").innerHTML = downloads(id);
+  $("#modal").setAttribute("aria-labelledby", "inspection-title");
   $("#modal-content").innerHTML =
-    `<div class="details-header"><div><p class="eyebrow">INSPECTION REPORT</p><h2>${esc(report.host.name)}</h2></div><span class="badge good">수집 완료</span></div><p class="small">${date(report.collectedAt)} · ${esc(report.host.scope)}</p><div class="actions">${downloads(id)}</div><div class="detail-grid"><div>프로세스<strong>${number(report.processes.length)}</strong></div><div>고유 라이브러리<strong>${number(operator.libraries.length)}</strong></div><div>발견·의심 조치<strong>${number(actions.length)}</strong></div></div><p class="small">카탈로그 개정 ${report.assessment?.catalogRevision ?? "미실시"} · 직군·패키지·버전별 중복 제거. 비대상·미판정은 조치 수에서 제외합니다.</p><h3>발견·의심 조치 ${actions.length > 200 ? "(첫 200건)" : ""}</h3>` +
+    `<p class="inspection-meta"><span class="badge good">수집 완료</span> ${date(report.collectedAt)} · ${esc(report.host.scope)}</p><div class="detail-grid"><div>프로세스<strong>${number(report.processes.length)}</strong></div><div>고유 라이브러리<strong>${number(operator.libraries.length)}</strong></div><div>발견·의심 조치<strong>${number(actions.length)}</strong></div></div><p class="small">카탈로그 개정 ${report.assessment?.catalogRevision ?? "미실시"} · 직군·패키지·버전별 중복 제거. 비대상·미판정은 조치 수에서 제외합니다.</p><h3>발견·의심 조치 ${actions.length > 200 ? "(첫 200건)" : ""}</h3>` +
     (actions.length ? table(["종류 / ID", "직군 · 패키지", "취약점발견", "심각도", "근거 · 조치"], actions.slice(0, 200).map(a =>
       `<tr><td><b>${esc(a.id)}</b><div class="small">${esc(a.kind)}</div></td><td>${esc(a.serviceGroup)}<br>${esc(a.packageName)}<br><b>${esc(a.version)}</b></td><td>${badge(a.status)}</td><td>${badge(a.severity)}</td><td><b>${esc(a.title)}</b><p>${list(a.recommendations)}</p><details><summary>근거 · 영향 위치 ${a.locations.length}곳</summary><p>${list(a.evidence)}</p><p>${list(a.locations.map(location))}</p><p class="small">${list(a.aliases)}<br>${list(a.references)}</p>${a.relatedIds?.length ? `<p class="small">권고의 관련 CVE (각 바이너리의 개별 영향 확정 아님)<br>${list(a.relatedIds)}</p>` : ""}</details></td></tr>`))
       : empty("발견·의심 항목이 없습니다", "미판정은 안전 판정이 아닙니다. 아래 점검 범위를 확인하세요.")) +
@@ -398,6 +407,7 @@ async function detail(id) {
     `<details class="report-section"><summary>수집 제한 · 오류 ${operator.issues.length}종류</summary>` +
     table(["계층", "대상", "내용"], operator.issues.map(i => `<tr><td>${esc(i.layer)}</td><td>${list(i.targets)}</td><td>${esc(i.message)}</td></tr>`)) + '</details>';
   $("#modal").showModal();
+  $("#modal-content").scrollTop = 0;
 }
 async function render() {
   if (!session) return;
@@ -435,6 +445,7 @@ async function render() {
     if (revision === renderRevision && currentView === view) {
       closeAssetPopover();
       $("#content").classList.toggle("asset-workspace", view === "assets");
+      $("#content").classList.toggle("target-workspace", view === "targets");
       $("#content").innerHTML = html;
     }
   } catch (error) {
@@ -572,6 +583,7 @@ document.addEventListener("submit", async (event) => {
   }
 });
 $("#modal-close").addEventListener("click", () => $("#modal").close());
+$("#inspection-close").addEventListener("click", () => $("#modal").close());
 $("#logout").addEventListener("click", async () => {
   try {
     await api("/logout", { method: "POST" });

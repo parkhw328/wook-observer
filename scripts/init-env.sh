@@ -6,10 +6,13 @@ if [ -e .env ]; then
   exit 1
 fi
 command -v openssl >/dev/null 2>&1 || { echo 'openssl is required.' >&2; exit 1; }
+observer_project_name=${COMPOSE_PROJECT_NAME:-wook-observer}
+case "$observer_project_name" in ''|*[!a-z0-9_-]*|[-_]*) echo 'Invalid COMPOSE_PROJECT_NAME.' >&2; exit 1;; esac
 umask 077
 # noclobber also prevents a concurrent invocation from replacing credentials.
 set -C
 {
+  printf 'COMPOSE_PROJECT_NAME=%s\n' "$observer_project_name"
   printf 'DATABASE_PASSWORD=%s\n' "$(openssl rand -hex 24)"
   printf 'OBSERVER_ADMIN_USER=admin\n'
   printf 'OBSERVER_ADMIN_PASSWORD=%s\n' "$(openssl rand -hex 18)"

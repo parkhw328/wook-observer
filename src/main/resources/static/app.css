@@ -1031,3 +1031,50 @@ dialog.service-editor { width: min(1440px, calc(100% - 40px)); max-width: calc(1
 .els-contract-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 18px; align-items: center; margin: 14px 0; padding: 12px; border: 1px solid #e6e0d9; border-radius: 8px; }
 .els-contract-fields p { grid-column: 1 / -1; margin: 0; }
 @media (max-width: 740px) { .els-contract-fields { grid-template-columns: 1fr; } }
+
+/* Inspection reports use the viewport, with actions outside the scrolling body. */
+dialog.inspection-modal { width: calc(100% - 32px); max-width: calc(100% - 32px); height: calc(100% - 32px); max-height: calc(100% - 32px); padding: 0; overflow: hidden; font-size: 14px; }
+dialog.inspection-modal[open] { display: flex; flex-direction: column; }
+.inspection-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; flex-shrink: 0; gap: 10px 20px; padding: 12px 20px; border-bottom: 1px solid var(--line); background: #fff; }
+.inspection-toolbar h2 { flex: 1 1 240px; min-width: 0; font-size: 19px; line-height: 1.4; margin: 0; overflow-wrap: anywhere; }
+.inspection-toolbar .actions { gap: 6px; }
+.inspection-modal button, .inspection-modal .button { font-size: 13px; padding: 7px 11px; min-height: 32px; }
+.inspection-modal #inspection-close { border-color: #bdb5ac; }
+.inspection-modal #modal-content { flex: 1; min-height: 0; overflow: auto; padding: 16px 20px; overscroll-behavior: contain; }
+.inspection-modal > #modal-close { display: none; }
+.inspection-modal .inspection-meta { margin: 0 0 12px; color: var(--muted); }
+.inspection-modal .detail-grid { margin: 10px 0; gap: 10px; }
+.inspection-modal .detail-grid div { padding: 10px 14px; }
+.inspection-modal .detail-grid strong { font-size: 25px; margin-top: 2px; }
+.inspection-modal .small, .inspection-modal .badge { font-size: 12px; }
+.inspection-modal h3 { font-size: 17px; margin: 16px 0 10px; }
+.inspection-modal .report-section { margin: 16px 0; padding-top: 12px; }
+.inspection-modal .report-section > summary { font-size: 16px; margin-bottom: 10px; }
+.inspection-modal .table-wrap { max-height: none; }
+.inspection-modal table { font-size: 13px; }
+.inspection-modal th { font-size: 12px; }
+.inspection-modal th, .inspection-modal td { padding: 9px 10px; }
+.inspection-modal .network-table { max-height: 65vh; max-height: 65dvh; }
+
+/* Target cards prioritize identifiers and actions; registration forms retain their scale. */
+main#content.target-workspace { max-width: none; padding: 20px; font-size: 14px; }
+.target-workspace .page-head { margin-bottom: 16px; gap: 12px; }
+.target-workspace .page-head p { font-size: 14px; margin: 0; }
+.target-workspace .note { font-size: 12px; padding: 10px 12px; margin-bottom: 14px; }
+.target-workspace .target-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 12px; }
+.target-workspace .target-card { padding: 14px; min-width: 0; display: flex; flex-direction: column; }
+.target-workspace .target-card h2 { font-size: 17px; line-height: 1.4; margin: 9px 0 5px; overflow-wrap: anywhere; }
+.target-workspace .target-address { font-size: 13px; margin: 0 0 6px; }
+.target-workspace .small { font-size: 12px; margin: 0 0 10px; overflow-wrap: anywhere; }
+.target-workspace .badge { font-size: 11px; padding: 2px 6px; }
+.target-workspace .head-actions, .target-workspace .actions { gap: 6px; }
+.target-workspace .target-card .actions { margin-top: auto; padding-top: 10px; }
+.target-workspace button, .target-workspace .button { font-size: 13px; min-height: 32px; padding: 6px 10px; }
+@media (max-width: 740px) {
+  dialog.inspection-modal { width: calc(100% - 12px); max-width: calc(100% - 12px); height: calc(100% - 12px); max-height: calc(100% - 12px); }
+  .inspection-toolbar, .inspection-modal #modal-content { padding: 12px; }
+  .inspection-toolbar h2 { font-size: 17px; }
+  .inspection-modal .detail-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .inspection-modal .detail-grid div { padding: 8px; }
+  main#content.target-workspace { padding: 14px 12px; }
+}

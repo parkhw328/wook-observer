@@ -75,6 +75,7 @@ document.addEventListener("submit", async event => {
 
 async function offlineTargetForm(id) {
   const target = id ? await api("/admin/targets/" + encodeURIComponent(id)) : {};
+  $("#content").classList.remove("target-workspace");
   $("#content").innerHTML = pageHead("파일 업로드 자산 등록", "SSH 계정 없이 자산을 등록하고 현장에서 수집한 결과를 반입합니다.", "", true)
     + `<section class="panel"><form id="offline-target-form" data-id="${esc(id || "")}"><div class="grid"><label>자산 이름<input name="name" required maxlength="120" value="${esc(target.name)}"></label><label>서버 주소 / 호스트명<input name="host" required maxlength="253" value="${esc(target.host)}" placeholder="192.168.10.20 또는 내부 DNS"></label></div><label>설명<textarea name="description" maxlength="1000" rows="4">${esc(target.description)}</textarea></label><p class="note">서버에 접속하지 않고 관리용으로 저장합니다. 수집 결과는 자산 상세의 결과 업로드에서 반영할 수 있습니다.</p><p class="error" role="alert"></p><div class="form-actions"><button type="button" data-action="cancel-target">취소</button><button type="submit" class="primary">자산 등록 정보 저장</button></div></form></section>`;
 }

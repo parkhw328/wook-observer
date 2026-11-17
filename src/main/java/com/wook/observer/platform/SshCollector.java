@@ -160,7 +160,7 @@ public class SshCollector {
             facts.put("host:identity_source", "uname_all");
             issues.add(new Observation.Issue("host", "호스트명", "기본 호스트명이 비어 있어 파일의 uname -a 근거로 보완했습니다. 최신 수집 SH를 사용하세요."));
         }
-        return new Observation("1.12.0", Instant.now(), new Observation.Host(hostName, "Linux", host[2], host[3], Integer.parseInt(host[4]),
+        return new Observation("1.12.1", Instant.now(), new Observation.Host(hostName, "Linux", host[2], host[3], Integer.parseInt(host[4]),
                 (long) Double.parseDouble(host[5]), scope, dockerVersion), linked, java, containers, issues, facts, null, inventory);
     }
 }
