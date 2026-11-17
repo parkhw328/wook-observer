@@ -40,11 +40,12 @@ public class ScanJobs implements ApplicationRunner {
     }
 
     public List<Map<String, Object>> list() {
-        return store.rows("SELECT id, target_id, target_name, requested_by, status, created_at, finished_at, message, finding_count FROM scan_job ORDER BY created_at DESC LIMIT 100");
+        return store.rows("SELECT id, target_id, target_name, requested_by, status, created_at, finished_at, message, finding_count, collection_method FROM scan_job ORDER BY created_at DESC LIMIT 100");
     }
 
     public synchronized String start(String targetId, String actor) {
         var target = targets.credentials(targetId);
+        if ("UPLOAD".equals(target.get("collection_mode"))) throw new ApiProblem(400, "파일 업로드 자산입니다. 서버에서 수집 스크립트를 실행한 결과를 업로드하세요.");
         if (!store.rows("SELECT id FROM scan_job WHERE target_id = ? AND status IN ('QUEUED', 'RUNNING')", targetId).isEmpty()) {
             OperationLog.warn("scan.duplicate", "targetId", targetId);
             throw new ApiProblem(409, "이 대상은 이미 점검 중입니다.");

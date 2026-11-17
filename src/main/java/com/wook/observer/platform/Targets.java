@@ -14,7 +14,7 @@ import java.util.UUID;
 @Service
 @Profile("!collector")
 public class Targets {
-    private static final String PUBLIC_COLUMNS = "id, name, host, port, ssh_user, description, created_by, created_at, auth_type, privilege_mode";
+    private static final String PUBLIC_COLUMNS = "id, name, host, port, ssh_user, description, created_by, created_at, auth_type, privilege_mode, collection_mode";
     private final Store store;
     private final SecretVault vault;
     public Targets(Store store, SecretVault vault) { this.store = store; this.vault = vault; }
@@ -27,7 +27,7 @@ public class Targets {
         // Explicit projection: newly added credential columns must never reach the browser.
         var safe = new LinkedHashMap<>(store.one("SELECT " + PUBLIC_COLUMNS + ", host_key FROM scan_target WHERE id = ?", id));
         var secret = credentials(id);
-        safe.put("hostKeyFingerprint", HostKeys.describe(Store.string(safe, "host_key")).fingerprint());
+        safe.put("hostKeyFingerprint", "UPLOAD".equals(safe.get("collection_mode")) ? "" : HostKeys.describe(Store.string(safe, "host_key")).fingerprint());
         safe.put("hasPrivateKey", !Store.string(secret, "private_key").isEmpty());
         safe.put("hasSshPassword", !Store.string(secret, "ssh_password").isEmpty());
         safe.put("hasKeyPassphrase", !Store.string(secret, "key_passphrase").isEmpty());
@@ -40,6 +40,7 @@ public class Targets {
         String hostKey = HostKeys.normalize(input.hostKey());
         boolean create = id == null;
         var existing = create ? Map.<String, Object>of() : credentials(id);
+        if ("UPLOAD".equals(existing.get("collection_mode"))) throw new ApiProblem(400, "파일 업로드 자산은 업로드 자산 설정에서 수정하세요.");
         String auth = input.authType() == null ? "KEY" : input.authType();
         String privilege = input.privilegeMode() == null ? "NONE" : input.privilegeMode();
         if (!Set.of("KEY", "PASSWORD").contains(auth) || !Set.of("NONE", "SU_ROOT", "SUDO", "SUDO_NOPASSWD").contains(privilege)) {
@@ -76,6 +77,29 @@ public class Targets {
         OperationLog.info("target.saved", "targetId", id, "actor", actor, "operation", create ? "CREATE" : "UPDATE", "authType", auth, "privilegeMode", privilege);
         return id;
     }
+
+    @org.springframework.transaction.annotation.Transactional
+    public String saveUpload(String id, UploadInput input, String actor) {
+        if (input.name() == null || input.name().isBlank() || input.name().length() > 120
+                || input.description() == null || input.description().length() > 1000
+                || input.name().codePoints().anyMatch(Character::isISOControl)) {
+            throw new ApiProblem(400, "자산 이름(120자 이내)과 설명(1,000자 이내)을 확인하세요.");
+        }
+        validateEndpoint(input.host(), 22);
+        if (id == null) {
+            id = UUID.randomUUID().toString();
+            store.jdbc.update("INSERT INTO scan_target(id, name, host, port, ssh_user, private_key, host_key, description, created_by, created_at, collection_mode) VALUES (?, ?, ?, 22, '', '', '', ?, ?, ?, 'UPLOAD')",
+                    id, input.name().strip(), input.host(), input.description(), actor, Instant.now().toString());
+        } else {
+            var row = store.one("SELECT collection_mode FROM scan_target WHERE id=? FOR UPDATE", id);
+            if (!"UPLOAD".equals(row.get("collection_mode"))) throw new ApiProblem(400, "SSH 대상의 연결 설정은 점검 대상 화면에서 수정하세요.");
+            store.jdbc.update("UPDATE scan_target SET name=?, host=?, description=? WHERE id=?", input.name().strip(), input.host(), input.description(), id);
+        }
+        OperationLog.afterCommit("target.upload.saved", "targetId", id, "actor", actor);
+        return id;
+    }
+
+    public record UploadInput(String name, String host, String description) { }
 
     private String secret(String supplied, Map<String, Object> existing, String column, boolean preserve, boolean required, String label) {
         if (supplied != null && !supplied.isEmpty()) {

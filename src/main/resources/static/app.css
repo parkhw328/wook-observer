@@ -938,3 +938,56 @@ button[aria-pressed="true"] { background: #fff0e5; border-color: var(--brand); c
   .service-grid th:first-child, .service-grid td:first-child { position: static; }
   .asset-filters label { flex-basis: 100%; }
 }
+
+/* Wide service editor: fixed actions, spacious controls, no horizontal form scrolling. */
+dialog.service-editor { width: min(1440px, calc(100% - 40px)); max-width: calc(100% - 40px); height: min(960px, calc(100% - 40px)); max-height: calc(100% - 40px); padding: 0; }
+.service-editor form { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.editor-header { display: flex; justify-content: space-between; align-items: start; gap: 20px; padding: 18px 24px; border-bottom: 1px solid var(--line); }
+.editor-header h2 { font-size: 22px; margin: 0 0 6px; }
+.editor-header p { font-size: 14px; margin: 0; overflow-wrap: anywhere; }
+.editor-body { min-height: 0; overflow: auto; padding: 20px 24px; overscroll-behavior: contain; }
+.editor-body fieldset { min-width: 0; margin: 0 0 24px; padding: 16px; }
+.editor-body legend { font-size: 17px; }
+.editor-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 24px; }
+.command-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.service-editor label { min-width: 0; margin: 0; font-size: 14px; }
+.service-editor :is(input,select,textarea) { font-size: 15px; padding: 10px 12px; }
+.service-editor textarea { resize: vertical; min-height: 84px; line-height: 1.6; }
+.command-fields textarea { min-height: 170px; }
+.editor-body pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; }
+.editor-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; align-items: center; padding: 12px 24px; border-top: 1px solid var(--line); background: #fffaf5; }
+.editor-actions .error { flex-basis: 100%; margin: 0; font-size: 14px; }
+.editor-actions .error:empty { display: none; }
+.editor-actions .small { margin-right: auto; font-size: 13px; }
+.editor-actions button, .editor-header button { font-size: 14px; margin: 0; }
+.asset-profile .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px 24px; }
+.asset-profile textarea { min-height: 140px; }
+.asset-markdown { max-width: 1200px; margin-inline: auto; }
+.asset-markdown :is(h3,h4,h5) { margin: 26px 0 14px; padding-top: 16px; border-top: 1px solid var(--line); }
+.asset-markdown h4 { font-size: 18px; }
+.asset-markdown h5 { font-size: 16px; }
+.asset-markdown h6 { font-size: 14px; margin: 16px 0 8px; }
+.asset-markdown td { white-space: normal; overflow-wrap: anywhere; }
+.asset-markdown table { min-width: 420px; }
+.asset-markdown tr td:first-child { min-width: 140px; }
+.asset-markdown pre, .markdown-source, .offline-command { white-space: pre-wrap; overflow-wrap: anywhere; background: #f5f5f4; padding: 16px; border-radius: 6px; font-size: 14px; }
+.import-preview { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--line); }
+.import-preview .grid { margin-top: 24px; }
+.import-facts { display: grid; grid-template-columns: 130px minmax(0,1fr); gap: 12px; font-size: 16px; }
+.import-facts dd { margin: 0; overflow-wrap: anywhere; }
+.import-preview details { margin: 16px 0; font-size: 15px; }
+.file-hash { display: block; overflow-wrap: anywhere; }
+@media (max-width: 1000px) {
+  .command-fields { grid-template-columns: 1fr; }
+  .command-fields textarea { min-height: 130px; }
+  .asset-profile .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+  dialog.service-editor { width: calc(100% - 12px); max-width: calc(100% - 12px); height: calc(100% - 12px); max-height: calc(100% - 12px); }
+  .editor-body, .editor-header, .editor-actions { padding: 14px; }
+  .editor-grid, .asset-profile .grid { grid-template-columns: 1fr; }
+  .editor-header h2 { font-size: 19px; }
+  .editor-actions .small { flex-basis: 100%; }
+  .import-facts { grid-template-columns: 1fr; gap: 4px; }
+  .import-facts dd { margin-bottom: 12px; }
+}

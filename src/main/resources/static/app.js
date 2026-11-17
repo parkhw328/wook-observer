@@ -23,6 +23,7 @@ const titles = {
   overview: "대시보드",
   targets: "점검 대상",
   assets: "자산 관리",
+  offline: "수집 결과 업로드",
   jobs: "점검 이력",
   catalog: "취약점 데이터",
   updates: "데이터 업데이트",
@@ -107,10 +108,10 @@ function jobsTable(jobs) {
       '<a class="button" href="#targets">점검 대상으로 이동 →</a>',
     );
   return table(
-    ["점검 대상", "시작 시각", "상태", "발견·의심", "결과"],
+    ["점검 대상", "실행 / 반입 시각", "상태", "발견·의심", "결과"],
     jobs.map(
       (job) =>
-        `<tr><td><b>${esc(job.target_name)}</b><div class="small">${esc(job.requested_by)}</div></td><td>${date(job.created_at)}</td><td>${badge(job.status)}</td><td>${job.status === "COMPLETED" ? number(job.finding_count) + "건" : "—"}</td><td>${job.status === "COMPLETED" ? `<button data-action="detail" data-id="${esc(job.id)}">상세 보기</button> <a class="button" href="/api/jobs/${encodeURIComponent(job.id)}/download/xlsx">XLSX ↓</a>` : `<span class="small">${esc(job.message || "수집 결과를 기다리고 있습니다.")}</span>`}</td></tr>`,
+        `<tr><td><b>${esc(job.target_name)}</b><div class="small">${esc(job.requested_by)} · ${job.collection_method === "UPLOAD" ? "파일 업로드" : "SSH"}</div></td><td>${date(job.created_at)}</td><td>${badge(job.status)}</td><td>${job.status === "COMPLETED" ? number(job.finding_count) + "건" : "—"}</td><td>${job.status === "COMPLETED" ? `<button data-action="detail" data-id="${esc(job.id)}">상세 보기</button> <a class="button" href="/api/jobs/${encodeURIComponent(job.id)}/download/xlsx">XLSX ↓</a>` : `<span class="small">${esc(job.message || "수집 결과를 기다리고 있습니다.")}</span>`}</td></tr>`,
     ),
   );
 }
@@ -128,22 +129,23 @@ async function targetView() {
   return (
     pageHead(
       "점검 대상",
-      "서버에 별도 Java 설치 없이 SSH로 기본 정보를 수집합니다.",
+      "SSH 점검 또는 현장 수집 파일 업로드로 서버를 관리합니다.",
       admin()
-        ? '<button class="primary" data-action="add-target">+ 대상 등록</button>'
+        ? '<a class="button" href="#offline">수집 SH / 결과 업로드</a><button data-action="add-upload-target">+ 파일 업로드 자산</button><button class="primary" data-action="add-target">+ SSH 대상</button>'
         : "",
     ) +
-    '<div class="note">Linux의 SSH·셸·ps가 기본 수집에 필요합니다. 컨테이너는 Docker 조회 권한, Java 상세는 Python 3 또는 jcmd 등 대상에서 사용할 수 있는 도구에 따라 수집 범위가 달라집니다.</div>' +
+    '<div class="note">Linux의 셸·ps 등 기본 도구가 필요하며 SSH 방식에는 서버 접속 권한이 필요합니다. 컨테이너는 Docker 조회 권한, Java 상세는 Python 3 또는 jcmd 등 대상에서 사용할 수 있는 도구에 따라 수집 범위가 달라집니다.</div>' +
     (targets.length
-      ? `<div class="target-grid">${targets.map((t) => `<article class="target-card"><div class="head-actions"><span class="badge info">SSH / LINUX</span><span class="badge">${t.auth_type === "PASSWORD" ? "비밀번호 인증" : "SSH 키 인증"}</span><span class="badge">${esc({NONE:"접속 계정 권한", SU_ROOT:"root 전환 · su", SUDO:"root 전환 · sudo", SUDO_NOPASSWD:"root 전환 · sudo"}[t.privilege_mode || "NONE"])}</span></div><h2>${esc(t.name)}</h2><p class="target-address">${esc(t.ssh_user)}@${esc(t.host)}:${t.port}</p><p class="small">${esc(t.description || "등록된 설명이 없습니다.")}</p><div class="actions"><a class="button" href="${assetLink(t.id)}">자산 관리</a>${admin() ? `<button class="quiet" data-action="edit-target" data-id="${esc(t.id)}">연결 설정</button>` : ""}<button class="primary" data-action="scan" data-id="${esc(t.id)}">점검 시작 →</button></div></article>`).join("")}</div>`
+      ? `<div class="target-grid">${targets.map((t) => `<article class="target-card"><div class="head-actions">${t.collection_mode === "UPLOAD" ? '<span class="badge info">파일 업로드 / LINUX</span>' : `<span class="badge info">SSH / LINUX</span><span class="badge">${t.auth_type === "PASSWORD" ? "비밀번호 인증" : "SSH 키 인증"}</span><span class="badge">${esc({NONE:"접속 계정 권한", SU_ROOT:"root 전환 · su", SUDO:"root 전환 · sudo", SUDO_NOPASSWD:"root 전환 · sudo"}[t.privilege_mode || "NONE"])}</span>`}</div><h2>${esc(t.name)}</h2><p class="target-address">${t.collection_mode === "UPLOAD" ? esc(t.host) : `${esc(t.ssh_user)}@${esc(t.host)}:${t.port}`}</p><p class="small">${esc(t.description || "등록된 설명이 없습니다.")}</p><div class="actions"><a class="button" href="${assetLink(t.id)}">자산 관리</a>${admin() ? `<button class="quiet" data-action="edit-target" data-id="${esc(t.id)}">${t.collection_mode === "UPLOAD" ? "자산 설정" : "연결 설정"}</button>` : ""}${t.collection_mode === "UPLOAD" ? `${admin() ? `<a class="button primary" href="#offline/${encodeURIComponent(t.id)}">결과 업로드 →</a>` : ""}<a class="button" href="/api/collector/observer-collect.sh">수집 SH</a>` : `<button class="primary" data-action="scan" data-id="${esc(t.id)}">점검 시작 →</button>`}</div></article>`).join("")}</div>`
       : empty(
           "아직 등록된 대상이 없습니다",
-          "관리자가 대상 서버의 SSH 접속 정보를 등록하면 점검을 시작할 수 있습니다.",
+          "SSH 대상을 등록하거나 현장에서 수집한 파일로 자산을 추가할 수 있습니다.",
         ))
   );
 }
 async function targetForm(id) {
   const target = id ? await api("/admin/targets/" + encodeURIComponent(id)) : {};
+  if (target.collection_mode === "UPLOAD") return offlineTargetForm(id);
   const selected = (value, expected) => value === expected ? "selected" : "";
   const auth = target.auth_type || "PASSWORD";
   $("#content").innerHTML = pageHead(
@@ -405,7 +407,7 @@ async function render() {
   if (!session) return;
   const requested = location.hash.slice(1).split("/")[0] || "overview";
   currentView = Object.hasOwn(titles, requested) ? requested : "overview";
-  if (["users", "updates"].includes(currentView) && !admin())
+  if (["users", "updates", "offline"].includes(currentView) && !admin())
     currentView = "overview";
   const view = currentView;
   const revision = ++renderRevision;
@@ -421,6 +423,7 @@ async function render() {
       overview,
       targets: targetView,
       assets: assetView,
+      offline: offlineView,
       jobs: async () =>
         pageHead(
           "점검 이력",
@@ -448,6 +451,9 @@ document.addEventListener("click", async (event) => {
   button.disabled = true;
   try {
     switch (button.dataset.action) {
+      case "add-upload-target":
+        await offlineTargetForm();
+        break;
       case "add-target":
         await targetForm();
         break;
@@ -579,11 +585,16 @@ $("#logout").addEventListener("click", async () => {
   }
 });
 window.addEventListener("hashchange", event => {
-  if (hasAssetDraft() && !window.confirm("저장하지 않은 자산·서비스 입력이 있습니다. 입력을 버리고 이동할까요?")) {
+  if ($("#service-edit")?.dataset.saving === "true" || ($("#offline-import")?.dataset.saving === "true" && $("#offline-import")?.dataset.complete !== "true")) {
+    history.replaceState(null, "", new URL(event.oldURL).hash || "#overview");
+    toast("저장이 끝날 때까지 기다려주세요."); return;
+  }
+  if ((hasAssetDraft() || hasOfflineDraft()) && !window.confirm("저장하지 않은 자산·서비스 입력이 있습니다. 입력을 버리고 이동할까요?")) {
     history.replaceState(null, "", new URL(event.oldURL).hash || "#overview");
     return;
   }
   editingService = null;
+  $("#service-editor").close();
   render();
 });
 (async () => {

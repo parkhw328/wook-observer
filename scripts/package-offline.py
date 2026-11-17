@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Assemble the verified 1.9.0 images and public catalogs into an air-gap bundle.
+"""Assemble the verified 1.10.0 images and public catalogs into an air-gap bundle.
 
 Runs only on the preparation machine. Never exports live containers, .env, or DB volumes.
 """
@@ -15,9 +15,9 @@ import tarfile
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "1.9.0"
+VERSION = "1.10.0"
 IMAGES = [
-    ("wook-observer:1.9.0", "wook-observer-1.9.0.tar.gz"),
+    ("wook-observer:1.10.0", "wook-observer-1.10.0.tar.gz"),
     ("postgres:18.6-bookworm", "postgres-18.6-bookworm.tar.gz"),
 ]
 
@@ -117,7 +117,7 @@ def prepare(bundle):
     # Read application seed and documentation from the same immutable source tag as the shipped application.
     seed = run("git", "show", f"{commit}:src/main/resources/catalog/bootstrap.json", capture_output=True).stdout
     (bundle / "updates/catalog.json").write_bytes(seed)
-    for source, destination in (("LICENSE", "LICENSE"), ("README.md", "docs/application-readme.md"), ("docs/catalog.md", "docs/catalog.md"), ("docs/ssh-access.md", "docs/ssh-access.md"), ("docs/runtime-decision.md", "docs/runtime-decision.md"), ("docs/interface.md", "docs/interface.md"), ("docs/operator-report.md", "docs/operator-report.md"), ("docs/asset-management.md", "docs/asset-management.md"), ("docs/operations-logging.md", "docs/operations-logging.md")):
+    for source, destination in (("LICENSE", "LICENSE"), ("README.md", "docs/application-readme.md"), ("docs/catalog.md", "docs/catalog.md"), ("docs/ssh-access.md", "docs/ssh-access.md"), ("docs/runtime-decision.md", "docs/runtime-decision.md"), ("docs/interface.md", "docs/interface.md"), ("docs/operator-report.md", "docs/operator-report.md"), ("docs/asset-management.md", "docs/asset-management.md"), ("docs/operations-logging.md", "docs/operations-logging.md"), ("docs/offline-collection.md", "docs/offline-collection.md")):
         (bundle / destination).write_bytes(run("git", "show", f"{commit}:{source}", capture_output=True).stdout)
     for source in tracked:
         if source.startswith(("docs/licenses/", "rules/")):
@@ -130,6 +130,12 @@ def prepare(bundle):
                                  .replace("](docs/", "](")
                                  .replace("](deployment/offline/README.md)", "](../README.md)")
                                  .replace("](rules/", "](../rules/"))
+    # Build the self-contained collector only from the release tag, identical to the download API.
+    def collector_resource(name):
+        return run("git", "show", f"{commit}:src/main/resources/collector/{name}", capture_output=True).stdout.decode("utf-8")
+    inventory = collector_resource("ssh-inventory.sh").replace("# SYSTEM_INVENTORY", collector_resource("system-inventory.sh"))
+    inventory = inventory.replace("# LIBRARY_INVENTORY", collector_resource("ssh-libraries.py"))
+    (bundle / "observer-collect.sh").write_text(collector_resource("offline-collect.sh").replace("# OBSERVER_INVENTORY", inventory))
     source_archive = bundle / f"source/wook-observer-{VERSION}-source.tar.gz"
     run("git", "archive", "--format=tar.gz", f"--prefix=wook-observer-{VERSION}-source/", "--output", str(source_archive), commit)
     readme = (bundle / "README.md").read_text()

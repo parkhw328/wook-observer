@@ -1,6 +1,5 @@
 package com.wook.observer.platform;
 
-import org.springframework.core.io.ClassPathResource;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -70,14 +69,7 @@ final class SshTransport {
                 builder.environment().put("DISPLAY", "observer:0");
                 builder.environment().put("OBSERVER_SSH_SECRET_FILE", secret.toString());
             }
-            String inventory;
-            try (var resource = new ClassPathResource("collector/ssh-inventory.sh").getInputStream()) {
-                inventory = new String(resource.readAllBytes(), StandardCharsets.UTF_8).replace("# SYSTEM_INVENTORY",
-                        com.wook.observer.collector.SystemInventoryCollector.script());
-            }
-            try (var resource = new ClassPathResource("collector/ssh-libraries.py").getInputStream()) {
-                inventory = inventory.replace("# LIBRARY_INVENTORY", new String(resource.readAllBytes(), StandardCharsets.UTF_8));
-            }
+            String inventory = com.wook.observer.collector.CollectionScripts.inventory();
             var handshake = new PrivilegeHandshake(mode, UUID.randomUUID().toString().replace("-", ""),
                     elevate ? targets.decrypt(target, "privilege_password") : "");
             command.addAll(List.of("-p", port, Store.string(target, "ssh_user") + "@" + host,

@@ -41,7 +41,7 @@ public class AssetWorkbook {
             var bodyFont = book.createFont(); bodyFont.setFontHeightInPoints((short) 11); body.setFont(bodyFont);
             Table guide = new Table(book, header, body, "내보내기 안내", 1, "항목", "내용");
             Table inventory = new Table(book, header, body, "자산 목록", 3,
-                    "서버명", "접속 주소", "자산번호", "환경", "담당자", "위치", "용도", "운영 상태", "수집 호스트", "OS", "아키텍처", "CPU", "메모리(GiB)",
+                    "서버명", "접속 주소", "자산번호", "환경", "담당자", "서버 위치", "용도", "운영 상태", "수집 호스트", "OS", "아키텍처", "CPU", "메모리(GiB)",
                     "최근 수집 시각(UTC)", "최근 점검 상태", "최근 점검 메시지", "관리 서비스 수", "절차 보완 수", "발견·의심 수", "자산 메모", "수정자", "수정 시각(UTC)", "자산 ID");
             Table runbook = new Table(book, header, body, "서비스 운영대장", 3,
                     "서버명", "접속 주소", "자산번호", "서비스명", "구분", "SW", "버전", "담당파트", "실행계정", "APP / 설치위치", "DATA", "LOG",

@@ -68,3 +68,7 @@ docker compose up -d --no-deps --force-recreate --pull never app
 조사가 끝나면 `INFO`로 되돌리고 같은 방법으로 적용한다. `DEBUG`에서도 비밀번호·개인 키·암호화 키·세션/CSRF 토큰·요청 본문·쿼리 문자열·서비스 실행 명령/비고·수집 원문·예외 메시지는 앱 운영 로그에 넣지 않는다. 예외는 종류와 코드 위치로 기록한다. 전체 애플리케이션/라이브러리를 `TRACE`로 변경하는 설정은 제공하지 않는다.
 
 앱과 DB의 Docker `json-file` 로그는 파일당 `10m`, 최대 `5`개로 회전한다(컨테이너당 약 50 MiB 기준). 기존 컨테이너에는 새 Compose 설정으로 재생성한 뒤 적용된다. 컨테이너 삭제 시 로그도 제거되므로 장기 보관이 필요하면 삭제 전에 `docker compose logs --no-color app > observer-app.log`로 저장한다. 등록 서버 주소·사용자 ID가 포함되므로 운영 로그 접근 권한은 관리자가 제한한다.
+
+## 현장 수집 파일 반입
+
+1.10.0의 `offline.script.downloaded`, `offline.previewed`, `offline.imported`, `offline.duplicate`, `target.upload.saved` 이벤트는 스크립트 제공·미리보기·원자적 반영·중복·SSH 없는 자산 저장을 기록한다. 반영 성공은 커밋 후 남기며 파일명/본문/실행 절차는 기록하지 않는다. 크기·SHA-256·요청/자산/점검 ID·수행자·현재 관측 반영 여부와 소요 시간으로 추적한다. 자산 Markdown 생성도 `asset.exported format=md`로 기록한다.

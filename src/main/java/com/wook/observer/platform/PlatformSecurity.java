@@ -29,7 +29,7 @@ public class PlatformSecurity {
         // Use the configured BCrypt provider without falling back to an auto-configured encoder.
         http.authenticationManager(new org.springframework.security.authentication.ProviderManager(java.util.List.of(provider)))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/", "/index.html", "/app.css", "/app.js", "/assets.js", "/login.html", "/login.js", "/observer-mark.svg", "/icons.svg", "/fonts/**", "/api/session", "/actuator/health", "/error").permitAll()
+                        .requestMatchers("/", "/index.html", "/app.css", "/app.js", "/assets.js", "/asset-report.js", "/offline.js", "/login.html", "/login.js", "/observer-mark.svg", "/icons.svg", "/fonts/**", "/api/session", "/actuator/health", "/error").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().denyAll())

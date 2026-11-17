@@ -20,6 +20,15 @@ public class AssetController {
 
     @GetMapping("/assets") public Map<String, Object> list() { return assets.list(); }
     @GetMapping("/assets/{target}") public Map<String, Object> detail(@PathVariable String target) { return assets.details(target); }
+    @GetMapping({"/assets/report.md", "/assets/{target}/report.md"})
+    public ResponseEntity<byte[]> markdown(@PathVariable(required = false) String target) {
+        long started = System.nanoTime();
+        byte[] bytes = assets.markdown(target).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        OperationLog.info("asset.exported", "targetId", target == null ? "ALL" : target, "format", "md", "bytes", bytes.length, "durationMs", OperationLog.elapsed(started));
+        return ResponseEntity.ok().contentType(MediaType.parseMediaType("text/markdown;charset=UTF-8"))
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"observer-assets.md\"").body(bytes);
+    }
     @GetMapping({"/assets/export.xlsx", "/assets/{target}/export.xlsx"})
     public ResponseEntity<byte[]> export(@PathVariable(required = false) String target) throws IOException {
         long started = System.nanoTime();

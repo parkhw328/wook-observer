@@ -5,9 +5,11 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Wook Observer · 서비스 점검</title>
     <link rel="icon" href="/observer-mark.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/app.css?v=1.9.0" />
-    <script defer src="/app.js?v=1.9.0"></script>
-    <script defer src="/assets.js?v=1.9.0"></script>
+    <link rel="stylesheet" href="/app.css?v=1.10.0" />
+    <script defer src="/app.js?v=1.10.0"></script>
+    <script defer src="/assets.js?v=1.10.0"></script>
+    <script defer src="/asset-report.js?v=1.10.0"></script>
+    <script defer src="/offline.js?v=1.10.0"></script>
   </head>
   <body>
     <div class="app-layout">
@@ -33,7 +35,7 @@
           >
         </nav>
         <div class="sidebar-bottom">
-          <span class="dot" aria-hidden="true"></span> 내부망 점검 플랫폼 (1.9.0)
+          <span class="dot" aria-hidden="true"></span> 내부망 점검 플랫폼 (1.10.0)
         </div>
       </aside>
       <div class="main-shell">
@@ -51,6 +53,7 @@
     </div>
     <div id="toast" role="status" aria-live="polite" hidden></div>
     <div id="asset-popover" class="asset-popover" role="tooltip" tabindex="0" hidden></div>
+    <dialog id="service-editor" class="service-editor" aria-labelledby="service-editor-title"></dialog>
     <dialog id="modal">
       <div id="modal-content"></div>
       <button id="modal-close" class="quiet">닫기</button>

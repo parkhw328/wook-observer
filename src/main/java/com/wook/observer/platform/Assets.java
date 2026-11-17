@@ -23,10 +23,10 @@ public class Assets {
     private final AssetWorkbook workbook;
     private final JsonMapper json = JsonMapper.builder().build();
     private static final String ASSET_COLUMNS = """
-            SELECT t.id, t.name, t.host, t.port, t.description,
+            SELECT t.id, t.name, t.host, t.port, t.description, t.collection_mode,
                 p.asset_code, p.environment, p.owner, p.location, p.purpose, p.lifecycle, p.notes,
                 COALESCE(p.revision, 0) AS revision, p.updated_by, p.updated_at,
-                i.job_id, i.observed_at, i.summary_json, j.finding_count,
+                i.job_id, i.observed_at, i.summary_json, j.finding_count, j.collection_method, j.import_sha256,
                 a.id AS latest_job_id, a.status AS latest_status, a.created_at AS latest_attempt_at, a.message AS latest_message,
                 (SELECT COUNT(*) FROM asset_service s WHERE s.target_id=t.id AND s.archived=FALSE) AS service_count,
                 (SELECT COUNT(*) FROM asset_service s WHERE s.target_id=t.id AND s.archived=FALSE
@@ -56,7 +56,7 @@ public class Assets {
     public Map<String, Object> details(String target) {
         var row = asset(store.one(ASSET_COLUMNS + " WHERE t.id=?", target));
         return Map.of("asset", row, "services", services(row), "jobs", store.rows(
-                "SELECT id, target_id, target_name, requested_by, status, created_at, finished_at, message, finding_count FROM scan_job WHERE target_id=? ORDER BY created_at DESC, id DESC LIMIT 20", target));
+                "SELECT id, target_id, target_name, requested_by, status, created_at, finished_at, message, finding_count, collection_method FROM scan_job WHERE target_id=? ORDER BY created_at DESC, id DESC LIMIT 20", target));
     }
 
     /** Export saved asset data in one consistent read, without SSH access or reassessment. */
@@ -65,6 +65,13 @@ public class Assets {
         var rows = target == null ? store.rows(ASSET_COLUMNS + " ORDER BY t.name, t.id")
                 : List.of(store.one(ASSET_COLUMNS + " WHERE t.id=?", target));
         workbook.write(rows.stream().map(this::asset).toList(), this::services, output);
+    }
+
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public String markdown(String target) {
+        var rows = target == null ? store.rows(ASSET_COLUMNS + " ORDER BY t.name, t.id")
+                : List.of(store.one(ASSET_COLUMNS + " WHERE t.id=?", target));
+        return com.wook.observer.report.AssetMarkdown.write(rows.stream().map(this::asset).toList(), this::services);
     }
 
     private List<Map<String, Object>> services(Map<String, Object> row) {
@@ -157,9 +164,9 @@ public class Assets {
 
     private void project(String job, Map<String, Object> scan, Observation report) {
         String target = Store.string(scan, "target_id");
-        var current = store.rows("SELECT i.job_id, j.created_at FROM asset_inventory i JOIN scan_job j ON j.id=i.job_id WHERE i.target_id=?", target);
+        var current = store.rows("SELECT i.job_id, i.observed_at FROM asset_inventory i WHERE i.target_id=?", target);
         if (!current.isEmpty() && (job.equals(current.getFirst().get("job_id"))
-                || Store.string(current.getFirst(), "created_at").compareTo(Store.string(scan, "created_at")) > 0)) return;
+                || Instant.parse(Store.string(current.getFirst(), "observed_at")).isAfter(report.collectedAt()))) return;
         String observedAt = report.collectedAt().toString();
         for (var candidate : ServiceDiscovery.discover(report)) {
             String observed = json.writeValueAsString(candidate);

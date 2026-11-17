@@ -18,7 +18,10 @@ public class PlatformErrors {
         return ResponseEntity.status(problem.status).body(Map.of("message", problem.getMessage()));
     }
 
-    @ExceptionHandler({HttpMessageNotReadableException.class, IllegalArgumentException.class, MaxUploadSizeExceededException.class})
+    @ExceptionHandler({HttpMessageNotReadableException.class, IllegalArgumentException.class, MaxUploadSizeExceededException.class,
+            org.springframework.web.bind.MissingServletRequestParameterException.class,
+            org.springframework.web.multipart.support.MissingServletRequestPartException.class,
+            org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class})
     public ResponseEntity<Map<String, String>> invalid(Exception exception) {
         OperationLog.warn("api.invalid_input", "errorType", exception.getClass().getSimpleName());
         return ResponseEntity.badRequest().body(Map.of("message", "입력 형식과 파일 크기를 확인하세요."));
